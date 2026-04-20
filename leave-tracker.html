@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Leave Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f0f2f7;
+    --surface: #ffffff;
+    --surface2: #f7f8fc;
+    --border: #e4e7ef;
+    --text: #1a1d2e;
+    --text2: #6b7280;
+    --accent: #3d5afe;
+    --accent-light: #eef0ff;
+    --danger: #ef4444;
+    --danger-light: #fff0f0;
+    --success: #10b981;
+    --warn: #f59e0b;
+    --radius: 12px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.07);
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--text);
+    color: white;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 15px; font-weight: 700; letter-spacing: 0.3px; }
+  #syncStatus { font-size: 11px; font-family: 'DM Mono', monospace; opacity: 0.6; }
+  #syncStatus.syncing { color: #fbbf24; opacity: 1; }
+  #syncStatus.ok { color: #34d399; opacity: 1; }
+  #syncStatus.err { color: #f87171; opacity: 1; }
+
+  /* ── TABS ── */
+  .tab-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-shrink: 0;
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 12px 4px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text2);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+
+  /* ── PAGES ── */
+  .pages-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+  .pages {
+    display: flex;
+    width: 400%;
+    height: 100%;
+    transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+  }
+  .page {
+    width: 25%;
+    height: 100%;
+    overflow-y: auto;
+    padding: 12px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 10px;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text2);
+    margin-bottom: 12px;
+  }
+
+  /* ── PERSON ROW ── */
+  .person-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .person-info { flex: 1; }
+  .person-name { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+
+  /* ── PILLS ── */
+  .pills { display: flex; flex-wrap: wrap; gap: 4px; }
+  .pill {
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 7px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .pill-del {
+    background: none; border: none; cursor: pointer;
+    color: var(--text2); font-size: 13px; line-height: 1;
+    padding: 0; margin-left: 2px;
+    transition: color 0.15s;
+  }
+  .pill-del:hover { color: var(--danger); }
+
+  /* ── NO-LEAVE ── */
+  .empty { color: var(--text2); font-size: 12px; font-style: italic; padding: 4px 0; }
+
+  /* ── ADD FORM ── */
+  .add-form {
+    background: var(--accent-light);
+    border: 1.5px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+  .add-form .form-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 10px;
+  }
+  .form-row { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  .form-row select, .form-row input {
+    flex: 1;
+    min-width: 80px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-row select:focus, .form-row input:focus { border-color: var(--accent); }
+  .form-row input { font-family: 'DM Mono', monospace; }
+  .btn-add {
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 9px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  .btn-add:hover { opacity: 0.9; }
+  .btn-add:active { transform: scale(0.98); }
+  .btn-add:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── CALENDAR ── */
+  .month-block { margin-bottom: 20px; }
+  .month-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+    padding: 0 2px;
+  }
+  .day-headers {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+    margin-bottom: 3px;
+  }
+  .day-hdr {
+    text-align: center;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+  }
+  .cal-day {
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 4px 3px;
+    min-height: 48px;
+    cursor: pointer;
+    transition: box-shadow 0.15s;
+    border: 1px solid transparent;
+  }
+  .cal-day:hover { box-shadow: 0 0 0 1.5px var(--accent); }
+  .cal-day.has-leave { border-color: var(--border); }
+  .cal-day.today { border-color: var(--accent); background: var(--accent-light); }
+  .cal-day-num {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text2);
+    margin-bottom: 3px;
+  }
+  .cal-chip {
+    display: block;
+    width: 100%;
+    font-size: 8px;
+    font-weight: 600;
+    border-radius: 3px;
+    padding: 1px 2px;
+    color: white;
+    margin-bottom: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cal-day.empty-day { background: transparent; border: none; cursor: default; }
+  .cal-day.empty-day:hover { box-shadow: none; }
+
+  /* ── SUMMARY ── */
+  .sum-month { margin-bottom: 16px; }
+  .sum-month-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text2);
+    padding: 6px 12px;
+    background: var(--surface);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    box-shadow: var(--shadow);
+  }
+
+  /* ── MANAGE PAGE ── */
+  .manage-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .manage-search {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--text);
+    outline: none;
+  }
+  .manage-search:focus { border-color: var(--accent); }
+  .manage-entry {
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .manage-info { flex: 1; }
+  .manage-name { font-weight: 700; font-size: 13px; }
+  .manage-meta { font-size: 11px; color: var(--text2); font-family: 'DM Mono', monospace; margin-top: 2px; }
+  .manage-actions { display: flex; gap: 6px; }
+  .btn-icon {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.15s;
+  }
+  .btn-icon:hover { background: var(--border); }
+  .btn-icon.del:hover { background: var(--danger-light); border-color: var(--danger); }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 100;
+    animation: fadein 0.2s;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--surface);
+    border-radius: 16px 16px 0 0;
+    width: 100%;
+    max-width: 480px;
+    padding: 20px;
+    animation: slideup 0.25s cubic-bezier(0.4,0,0.2,1);
+  }
+  .modal-title { font-weight: 700; font-size: 15px; margin-bottom: 14px; }
+  .modal-body { font-size: 13px; line-height: 1.7; color: var(--text2); margin-bottom: 16px; }
+  .modal-actions { display: flex; gap: 8px; }
+  .btn-modal {
+    flex: 1; padding: 10px; border-radius: 9px; font-family: inherit;
+    font-size: 13px; font-weight: 600; border: none; cursor: pointer; transition: opacity 0.15s;
+  }
+  .btn-cancel { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); }
+  .btn-confirm-del { background: var(--danger); color: white; }
+  .btn-confirm-save { background: var(--accent); color: white; }
+  .btn-modal:hover { opacity: 0.85; }
+
+  .edit-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1.5px solid var(--accent);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    margin-bottom: 14px;
+  }
+
+  @keyframes fadein { from { opacity:0 } to { opacity:1 } }
+  @keyframes slideup { from { transform: translateY(30px) } to { transform: translateY(0) } }
+
+  /* ── LOADING ── */
+  .loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    gap: 10px;
+    color: var(--text2);
+    font-size: 13px;
+  }
+  .spinner {
+    width: 24px; height: 24px;
+    border: 2.5px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg) } }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 20px; left: 50%;
+    transform: translateX(-50%) translateY(60px);
+    background: var(--text);
+    color: white;
+    border-radius: 20px;
+    padding: 9px 18px;
+    font-size: 12px;
+    font-weight: 500;
+    z-index: 200;
+    transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  .week-label {
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    color: var(--text2);
+    margin-bottom: 6px;
+    padding: 0 2px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📅 Leave Tracker</h1>
+  <span id="syncStatus">—</span>
+</header>
+
+<div class="tab-bar">
+  <div class="tab-btn active" onclick="goTab(0)">Home</div>
+  <div class="tab-btn" onclick="goTab(1)">Calendar</div>
+  <div class="tab-btn" onclick="goTab(2)">Summary</div>
+  <div class="tab-btn" onclick="goTab(3)">Manage</div>
+</div>
+
+<div class="pages-wrap">
+  <div class="pages" id="pages">
+    <div class="page" id="pg-home"></div>
+    <div class="page" id="pg-calendar"></div>
+    <div class="page" id="pg-summary"></div>
+    <div class="page" id="pg-manage"></div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal" onclick="handleModalOverlay(event)">
+  <div class="modal-box" id="modalBox"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════
+   SUPABASE SETUP
+═══════════════════════════════════════════ */
+const SUPABASE_URL = 'https://arrhcpymwoqspnflquuk.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_j3_sOVi_nG4P1abyqrtWZQ_VnAKEC9m';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* ═══════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════ */
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const TEAM = ["Dan","JCP","Jon","Joehary","KY","MS","MT","PH","Sam","TL","TW","Yang"];
+const PALETTE = ["#ef4444","#3b82f6","#10b981","#a855f7","#f59e0b","#ec4899","#14b8a6","#f97316","#8b5cf6","#06b6d4","#84cc16","#e11d48"];
+
+const colorMap = {};
+TEAM.forEach((n,i) => colorMap[n] = PALETTE[i % PALETTE.length]);
+function getColor(name){ return colorMap[name] || "#6b7280"; }
+
+/* ═══════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════ */
+let allEntries = []; // flat array of {id, name, month, segment}
+let leaveData  = {}; // { Apr: [ {name, segments:[], ids:[]} ] }
+
+/* ═══════════════════════════════════════════
+   DATA LAYER
+═══════════════════════════════════════════ */
+async function loadData(){
+  setSync("syncing", "syncing…");
+  const { data, error } = await db
+    .from('leave_entries')
+    .select('*')
+    .order('name');
+
+  if(error){ setSync("err","error"); showToast("Failed to load data"); return; }
+
+  allEntries = data;
+  leaveData  = {};
+
+  data.forEach(row => {
+    if(!leaveData[row.month]) leaveData[row.month] = {};
+    if(!leaveData[row.month][row.name])
+      leaveData[row.month][row.name] = { name: row.name, segments: [], ids: [] };
+    leaveData[row.month][row.name].segments.push(row.segment);
+    leaveData[row.month][row.name].ids.push(row.id);
+  });
+
+  // Convert inner objects → arrays
+  Object.keys(leaveData).forEach(m => {
+    leaveData[m] = Object.values(leaveData[m]);
+  });
+
+  setSync("ok","synced");
+}
+
+async function addEntry(name, month, segment){
+  segment = segment.trim();
+  if(!name || !month || !segment){ showToast("Fill in all fields"); return; }
+  setSync("syncing","saving…");
+  const { error } = await db.from('leave_entries').insert({ name, month, segment });
+  if(error){ setSync("err","error"); showToast("Save failed: "+error.message); return; }
+  showToast(`Added ${name} – ${month} ${segment}`);
+  await refresh();
+}
+
+async function deleteEntry(id){
+  setSync("syncing","deleting…");
+  const { error } = await db.from('leave_entries').delete().eq('id', id);
+  if(error){ setSync("err","error"); showToast("Delete failed"); return; }
+  showToast("Entry deleted");
+  await refresh();
+}
+
+async function editEntry(id, newSegment){
+  newSegment = newSegment.trim();
+  if(!newSegment){ showToast("Segment cannot be empty"); return; }
+  setSync("syncing","saving…");
+  const { error } = await db.from('leave_entries').update({ segment: newSegment }).eq('id', id);
+  if(error){ setSync("err","error"); showToast("Update failed"); return; }
+  showToast("Entry updated");
+  await refresh();
+}
+
+async function refresh(){
+  await loadData();
+  buildHome();
+  buildCalendar();
+  buildSummary();
+  buildManage();
+}
+
+/* ═══════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════ */
+function extractDays(seg){
+  if(!seg) return [];
+  const match = seg.match(/(\d+)\s*[-~to]+\s*(\d+)|(\d+)/);
+  if(!match) return [];
+  if(match[1] && match[2]){
+    const a = Number(match[1]), b = Number(match[2]);
+    const arr = [];
+    for(let i=a; i<=b; i++) arr.push(i);
+    return arr;
+  }
+  if(match[3]) return [Number(match[3])];
+  return [];
+}
+
+function getWeek(offset=0){
+  const now = new Date();
+  const day = now.getDay();
+  const diff = (day===0?-6:1-day) + (offset*7);
+  const week = [];
+  for(let i=0; i<5; i++){
+    let d = new Date(now);
+    d.setDate(now.getDate() + diff + i);
+    week.push({ month: MONTHS[d.getMonth()], day: d.getDate(), date: d });
+  }
+  return week;
+}
+
+function fmtWeek(week){
+  const a = week[0].date, b = week[4].date;
+  const mo = (d) => d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  return `${mo(a)} – ${mo(b)}`;
+}
+
+function setSync(cls, msg){
+  const el = document.getElementById('syncStatus');
+  el.className = cls;
+  el.textContent = msg;
+}
+
+/* ═══════════════════════════════════════════
+   BUILD HOME
+═══════════════════════════════════════════ */
+function buildHome(){
+  const el = document.getElementById('pg-home');
+
+  const thisWeek = getWeek(0);
+  const nextWeek = getWeek(1);
+
+  function getPeopleOnLeave(week){
+    const map = {};
+    Object.keys(leaveData).forEach(month => {
+      (leaveData[month]||[]).forEach(p => {
+        p.segments.forEach((seg, i) => {
+          const days = extractDays(seg);
+          week.forEach(w => {
+            if(w.month === month && days.includes(w.day)){
+              if(!map[p.name]) map[p.name] = { segments: new Set(), ids: new Set() };
+              map[p.name].segments.add(seg);
+              map[p.name].ids.add(p.ids[i]);
+            }
+          });
+        });
+      });
+    });
+    return map;
+  }
+
+  const thisMap = getPeopleOnLeave(thisWeek);
+  const nextMap = getPeopleOnLeave(nextWeek);
+
+  function renderWeekCard(title, label, map){
+    const keys = Object.keys(map);
+    const body = keys.length === 0
+      ? `<div class="empty">No leave this week 🎉</div>`
+      : keys.map(name => `
+          <div class="person-row">
+            <div class="avatar" style="background:${getColor(name)}">${name.slice(0,2)}</div>
+            <div class="person-info">
+              <div class="person-name">${name}</div>
+              <div class="pills">
+                ${[...map[name].segments].map(s=>`<div class="pill">${s}</div>`).join('')}
+              </div>
+            </div>
+          </div>`).join('');
+
+    return `
+      <div class="card">
+        <div class="card-title">${title}</div>
+        <div class="week-label">${label}</div>
+        ${body}
+      </div>`;
+  }
+
+  // Add form
+  const form = `
+    <div class="add-form">
+      <div class="form-title">+ Add Leave</div>
+      <div class="form-row">
+        <select id="f-name">
+          <option value="">Name…</option>
+          ${TEAM.map(n=>`<option>${n}</option>`).join('')}
+        </select>
+        <select id="f-month">
+          <option value="">Month…</option>
+          ${MONTHS.map(m=>`<option>${m}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row">
+        <input id="f-seg" placeholder="e.g. 14-16 or 7 (AM only)" />
+      </div>
+      <button class="btn-add" id="addBtn" onclick="handleAdd()">Add Entry</button>
+    </div>`;
+
+  el.innerHTML = form
+    + renderWeekCard("This Week", fmtWeek(thisWeek), thisMap)
+    + renderWeekCard("Next Week", fmtWeek(nextWeek), nextMap);
+}
+
+function handleAdd(){
+  const name  = document.getElementById('f-name').value;
+  const month = document.getElementById('f-month').value;
+  const seg   = document.getElementById('f-seg').value;
+  const btn   = document.getElementById('addBtn');
+  btn.disabled = true;
+  addEntry(name, month, seg).finally(()=>{ btn.disabled=false; });
+}
+
+/* ═══════════════════════════════════════════
+   BUILD CALENDAR
+═══════════════════════════════════════════ */
+function buildCalendar(){
+  const el = document.getElementById('pg-calendar');
+  el.innerHTML = '';
+
+  const today = new Date();
+
+  MONTHS.forEach((m, idx) => {
+    const year    = 2026;
+    const total   = new Date(year, idx+1, 0).getDate();
+    const firstDow = new Date(year, idx, 1).getDay(); // 0=Sun
+    const startOffset = (firstDow === 0 ? 6 : firstDow - 1); // Mon-based
+
+    const block = document.createElement('div');
+    block.className = 'month-block';
+    block.innerHTML = `<div class="month-label">${m} ${year}</div>
+      <div class="day-headers">
+        ${['M','T','W','T','F','S','S'].map(d=>`<div class="day-hdr">${d}</div>`).join('')}
+      </div>`;
+
+    const grid = document.createElement('div');
+    grid.className = 'cal-grid';
+
+    // blank cells before month start
+    for(let i=0; i<startOffset; i++){
+      const blank = document.createElement('div');
+      blank.className = 'cal-day empty-day';
+      grid.appendChild(blank);
+    }
+
+    for(let d=1; d<=total; d++){
+      const cell = document.createElement('div');
+      cell.className = 'cal-day';
+
+      const isToday = (today.getFullYear()===year && today.getMonth()===idx && today.getDate()===d);
+      if(isToday) cell.classList.add('today');
+
+      const numEl = document.createElement('div');
+      numEl.className = 'cal-day-num';
+      numEl.textContent = d;
+      cell.appendChild(numEl);
+
+      const details = [];
+      (leaveData[m]||[]).forEach(p => {
+        p.segments.forEach((seg, si) => {
+          if(extractDays(seg).includes(d)){
+            details.push({ name: p.name, seg, id: p.ids[si] });
+            const chip = document.createElement('span');
+            chip.className = 'cal-chip';
+            chip.style.background = getColor(p.name);
+            chip.textContent = p.name.slice(0,3);
+            cell.appendChild(chip);
+            cell.classList.add('has-leave');
+          }
+        });
+      });
+
+      cell.onclick = () => openDayModal(m, d, details);
+      grid.appendChild(cell);
+    }
+
+    block.appendChild(grid);
+    el.appendChild(block);
+  });
+}
+
+/* ═══════════════════════════════════════════
+   BUILD SUMMARY
+═══════════════════════════════════════════ */
+function buildSummary(){
+  const el = document.getElementById('pg-summary');
+  el.innerHTML = '';
+
+  const months = Object.keys(leaveData);
+  if(months.length === 0){
+    el.innerHTML = '<div class="loading"><div>No data yet</div></div>';
+    return;
+  }
+
+  months.forEach(m => {
+    const block = document.createElement('div');
+    block.className = 'sum-month';
+    block.innerHTML = `<div class="sum-month-title">${m} 2026</div>`;
+
+    (leaveData[m]||[]).forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'card';
+      row.style.marginBottom = '6px';
+      row.innerHTML = `
+        <div class="person-row">
+          <div class="avatar" style="background:${getColor(p.name)}">${p.name.slice(0,2)}</div>
+          <div class="person-info">
+            <div class="person-name">${p.name}</div>
+            <div class="pills">
+              ${p.segments.map((s,i) => `
+                <div class="pill">
+                  ${s}
+                  <button class="pill-del" onclick="confirmDelete('${p.ids[i]}','${p.name}','${s}')" title="Remove">×</button>
+                </div>`).join('')}
+            </div>
+          </div>
+        </div>`;
+      block.appendChild(row);
+    });
+
+    el.appendChild(block);
+  });
+}
+
+/* ═══════════════════════════════════════════
+   BUILD MANAGE
+═══════════════════════════════════════════ */
+function buildManage(){
+  const el = document.getElementById('pg-manage');
+  renderManage(el, '');
+
+  el.querySelector('#manageSearch')?.addEventListener('input', e => {
+    renderManage(el, e.target.value.toLowerCase());
+  });
+}
+
+function renderManage(el, filter){
+  const entries = allEntries.filter(e =>
+    !filter ||
+    e.name.toLowerCase().includes(filter) ||
+    e.month.toLowerCase().includes(filter) ||
+    e.segment.toLowerCase().includes(filter)
+  );
+
+  const listHTML = entries.length === 0
+    ? `<div class="empty" style="padding:20px;text-align:center;">No entries found</div>`
+    : entries.map(e => `
+        <div class="manage-entry">
+          <div class="avatar" style="background:${getColor(e.name)}">${e.name.slice(0,2)}</div>
+          <div class="manage-info">
+            <div class="manage-name">${e.name}</div>
+            <div class="manage-meta">${e.month} 2026 · ${e.segment}</div>
+          </div>
+          <div class="manage-actions">
+            <div class="btn-icon" onclick="openEditModal('${e.id}','${e.segment.replace(/'/g,"&#39;")}')">✏️</div>
+            <div class="btn-icon del" onclick="confirmDelete('${e.id}','${e.name}','${e.segment.replace(/'/g,"&#39;")}')">🗑️</div>
+          </div>
+        </div>`).join('');
+
+  el.innerHTML = `
+    <div class="card-title" style="padding:2px 2px 10px">All Entries (${entries.length})</div>
+    <input class="manage-search" id="manageSearch" placeholder="Search name, month, dates…" value="${filter}">
+    ${listHTML}`;
+
+  el.querySelector('#manageSearch').addEventListener('input', e => {
+    renderManage(el, e.target.value.toLowerCase());
+  });
+}
+
+/* ═══════════════════════════════════════════
+   MODALS
+═══════════════════════════════════════════ */
+function openModal(html){
+  document.getElementById('modalBox').innerHTML = html;
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal(){
+  document.getElementById('modal').classList.remove('open');
+}
+function handleModalOverlay(e){
+  if(e.target === document.getElementById('modal')) closeModal();
+}
+
+function openDayModal(month, day, details){
+  const rows = details.length === 0
+    ? `<div class="empty">No one on leave</div>`
+    : details.map(d => `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div class="avatar" style="background:${getColor(d.name)};width:26px;height:26px;font-size:9px">${d.name.slice(0,2)}</div>
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:13px">${d.name}</div>
+            <div style="font-size:11px;color:var(--text2);font-family:'DM Mono',monospace">${d.seg}</div>
+          </div>
+          <div class="btn-icon del" style="width:26px;height:26px;font-size:12px" onclick="closeModal();confirmDelete('${d.id}','${d.name}','${d.seg}')">🗑️</div>
+        </div>`).join('');
+
+  openModal(`
+    <div class="modal-title">📅 ${month} ${day}, 2026</div>
+    <div class="modal-body">${rows}</div>
+    <div class="modal-actions">
+      <button class="btn-modal btn-cancel" onclick="closeModal()">Close</button>
+    </div>`);
+}
+
+function confirmDelete(id, name, seg){
+  openModal(`
+    <div class="modal-title">Delete Entry?</div>
+    <div class="modal-body">Remove <b>${name}</b> – <span style="font-family:'DM Mono',monospace">${seg}</span>?<br>This cannot be undone.</div>
+    <div class="modal-actions">
+      <button class="btn-modal btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-modal btn-confirm-del" onclick="closeModal();deleteEntry('${id}')">Delete</button>
+    </div>`);
+}
+
+function openEditModal(id, currentSeg){
+  openModal(`
+    <div class="modal-title">Edit Entry</div>
+    <input class="edit-input" id="editInput" value="${currentSeg}" placeholder="e.g. 14-16 or 7 (AM only)" />
+    <div class="modal-actions">
+      <button class="btn-modal btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-modal btn-confirm-save" onclick="closeModal();editEntry('${id}',document.getElementById('editInput').value)">Save</button>
+    </div>`);
+  setTimeout(()=>document.getElementById('editInput')?.focus(), 100);
+}
+
+/* ═══════════════════════════════════════════
+   TABS
+═══════════════════════════════════════════ */
+let currentTab = 0;
+const pagesEl  = document.getElementById('pages');
+const tabBtns  = document.querySelectorAll('.tab-btn');
+
+function goTab(i){
+  currentTab = i;
+  pagesEl.style.transform = `translateX(-${i*25}%)`;
+  tabBtns.forEach((b,j) => b.classList.toggle('active', j===i));
+}
+
+/* ═══════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════ */
+let toastTimer;
+function showToast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.remove('show'), 2500);
+}
+
+/* ═══════════════════════════════════════════
+   INIT — show loaders then fetch
+═══════════════════════════════════════════ */
+['pg-home','pg-calendar','pg-summary','pg-manage'].forEach(id => {
+  document.getElementById(id).innerHTML =
+    `<div class="loading"><div class="spinner"></div><div>Loading…</div></div>`;
+});
+
+loadData().then(() => {
+  buildHome();
+  buildCalendar();
+  buildSummary();
+  buildManage();
+});
+</script>
+</body>
+</html>
