@@ -238,7 +238,7 @@
     background: var(--surface);
     border-radius: 6px;
     padding: 4px 3px;
-    min-height: 48px;
+    min-height: 36px;
     cursor: pointer;
     transition: box-shadow 0.15s;
     border: 1px solid transparent;
@@ -252,70 +252,226 @@
     color: var(--text2);
     margin-bottom: 3px;
   }
-  .cal-chip {
-    display: block;
-    width: 100%;
+  .cal-dots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+  .cal-dot {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    border-radius: 999px;
+    padding: 1px 5px 1px 3px;
     font-size: 8px;
-    font-weight: 600;
-    border-radius: 3px;
-    padding: 1px 2px;
+    font-weight: 700;
     color: white;
-    margin-bottom: 1px;
+    white-space: nowrap;
+    line-height: 1.4;
+  }
+  .cal-dot-circle {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.5);
+    flex-shrink: 0;
+  }
+  .cal-day.empty-day { background: transparent; border: none; cursor: default; }
+  .cal-day.empty-day:hover { box-shadow: none; }
+  .cal-day.is-ph { background: #fff8e1; border-color: #f59e0b !important; }
+  .cal-day.is-lieu { background: #fff3e0; border-color: #fb923c !important; }
+  .cal-ph-label {
+    font-size: 7px;
+    font-weight: 700;
+    color: #b45309;
+    line-height: 1.2;
+    margin-bottom: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .cal-day.empty-day { background: transparent; border: none; cursor: default; }
-  .cal-day.empty-day:hover { box-shadow: none; }
+  .cal-lieu-label {
+    font-size: 7px;
+    font-weight: 700;
+    color: #c2410c;
+    line-height: 1.2;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cal-day-num.ph-num { color: #b45309; font-weight: 800; }
+  .cal-day-num.lieu-num { color: #c2410c; font-weight: 800; }
 
   /* ── SUMMARY ── */
-  .sum-month { margin-bottom: 16px; }
-  .sum-month-title {
+  .sum-month-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .sum-month-hdr {
+    background: var(--text);
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 6px 12px;
+  }
+  .sum-list { padding: 4px 0; }
+  .sum-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sum-row:last-child { border-bottom: none; }
+  .sum-avatar {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    font-size: 8px;
+    font-weight: 700;
+    color: white;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .sum-name {
+    font-size: 12px;
+    font-weight: 600;
+    width: 58px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sum-segs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    flex: 1;
+  }
+  .sum-pill {
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 5px;
+  }
+
+  /* ── MANAGE PAGE ── */
+  .mgmt-box {
+    background: var(--surface);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .mgmt-box-hdr {
+    background: var(--text);
+    color: white;
     font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.8px;
-    color: var(--text2);
-    padding: 6px 12px;
-    background: var(--surface);
-    border-radius: 8px;
-    margin-bottom: 6px;
-    box-shadow: var(--shadow);
-  }
-
-  /* ── MANAGE PAGE ── */
-  .manage-header {
+    padding: 9px 14px;
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 12px;
   }
-  .manage-search {
+  .mgmt-count {
+    background: rgba(255,255,255,0.2);
+    border-radius: 20px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .mgmt-box-body { padding: 12px; }
+  .mgmt-form-row { display: flex; gap: 6px; margin-bottom: 8px; }
+  .mgmt-select, .mgmt-input {
     flex: 1;
-    background: var(--surface);
+    background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 9px 12px;
+    padding: 9px 10px;
     font-family: inherit;
     font-size: 12px;
     color: var(--text);
     outline: none;
+    transition: border-color 0.2s;
   }
-  .manage-search:focus { border-color: var(--accent); }
-  .manage-entry {
-    background: var(--surface);
-    border-radius: 10px;
-    padding: 12px;
-    margin-bottom: 8px;
-    box-shadow: var(--shadow);
+  .mgmt-select:focus, .mgmt-input:focus { border-color: var(--accent); }
+  .mgmt-input { font-family: 'DM Mono', monospace; }
+  .mgmt-btn-add {
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    letter-spacing: 0.3px;
+  }
+  .mgmt-btn-add:hover { opacity: 0.88; }
+  .mgmt-btn-add:active { transform: scale(0.98); }
+  .mgmt-btn-add:disabled { opacity: 0.45; cursor: not-allowed; }
+  .mgmt-search {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .mgmt-search:focus { border-color: var(--accent); }
+  .mgmt-list { }
+  .mgmt-entry {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    transition: background 0.15s;
   }
-  .manage-info { flex: 1; }
-  .manage-name { font-weight: 700; font-size: 13px; }
-  .manage-meta { font-size: 11px; color: var(--text2); font-family: 'DM Mono', monospace; margin-top: 2px; }
-  .manage-actions { display: flex; gap: 6px; }
+  .mgmt-entry:hover { background: var(--surface2); }
+  .mgmt-entry-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .mgmt-entry-name { font-size: 12px; font-weight: 700; }
+  .mgmt-entry-meta {
+    font-size: 11px;
+    color: var(--text2);
+    font-family: 'DM Mono', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mgmt-entry-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .mgmt-error {
+    background: #fff0f0;
+    border: 1px solid #fca5a5;
+    border-radius: 7px;
+    color: #dc2626;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+  }
   .btn-icon {
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -474,7 +630,26 @@ const PALETTE = ["#ef4444","#3b82f6","#10b981","#a855f7","#f59e0b","#ec4899","#1
 
 const colorMap = {};
 TEAM.forEach((n,i) => colorMap[n] = PALETTE[i % PALETTE.length]);
+
+/* Public holidays: key = "Mon-DD", value = short name */
+const PUBLIC_HOLIDAYS = {
+  "Jan-1":  "New Year's Day",
+  "Feb-17": "CNY",
+  "Feb-18": "CNY",
+  "Mar-21": "Hari Raya Puasa",
+  "Apr-3":  "Good Friday",
+  "May-1":  "Labour Day",
+  "May-27": "Hari Raya Haji",
+  "Jun-1":  "Vesak (in lieu)",   // Vesak was Sun 31 May
+  "Aug-10": "National Day (in lieu)", // Natl Day was Sun 9 Aug
+  "Nov-9":  "Deepavali (in lieu)",    // Deepavali was Sun 8 Nov
+  "Dec-25": "Christmas Day",
+};
+function phKey(month, day){ return month + "-" + day; }
 function getColor(name){ return colorMap[name] || "#6b7280"; }
+
+/* Years shown in the calendar — add 2027 here when ready */
+const CAL_YEARS = [2026];
 
 /* ═══════════════════════════════════════════
    STATE
@@ -492,12 +667,25 @@ async function loadData(){
     .select('*')
     .order('name');
 
-  if(error){ setSync("err","error"); showToast("Failed to load data"); return; }
+  if(error){
+    setSync("err","error");
+    showToast("Failed to load: " + error.message);
+    console.error("Supabase error:", error);
+    return;
+  }
 
-  allEntries = data;
+  if(!data || data.length === 0){
+    console.warn("Supabase returned no rows.");
+  }
+
+  allEntries = data || [];
   leaveData  = {};
 
-  data.forEach(row => {
+  // Build leaveData only for CAL_YEARS (calendar-visible years)
+  allEntries.forEach(row => {
+    const rowYear = row.year || 2026; // default 2026 for old rows without year
+    if(!CAL_YEARS.includes(rowYear)) return; // skip future years not yet on calendar
+
     if(!leaveData[row.month]) leaveData[row.month] = {};
     if(!leaveData[row.month][row.name])
       leaveData[row.month][row.name] = { name: row.name, segments: [], ids: [] };
@@ -510,16 +698,17 @@ async function loadData(){
     leaveData[m] = Object.values(leaveData[m]);
   });
 
-  setSync("ok","synced");
+  setSync("ok", "synced (" + allEntries.length + ")");
+  console.log("Loaded", allEntries.length, "entries:", allEntries);
 }
 
-async function addEntry(name, month, segment){
+async function addEntry(name, month, year, segment){
   segment = segment.trim();
-  if(!name || !month || !segment){ showToast("Fill in all fields"); return; }
+  if(!name || !month || !year || !segment){ showToast("Fill in all fields"); return; }
   setSync("syncing","saving…");
-  const { error } = await db.from('leave_entries').insert({ name, month, segment });
+  const { error } = await db.from('leave_entries').insert({ name, month, year: Number(year), segment });
   if(error){ setSync("err","error"); showToast("Save failed: "+error.message); return; }
-  showToast(`Added ${name} – ${month} ${segment}`);
+  showToast('Added ' + name + ' – ' + month + ' ' + year + ' ' + segment);
   await refresh();
 }
 
@@ -645,38 +834,9 @@ function buildHome(){
       </div>`;
   }
 
-  // Add form
-  const form = `
-    <div class="add-form">
-      <div class="form-title">+ Add Leave</div>
-      <div class="form-row">
-        <select id="f-name">
-          <option value="">Name…</option>
-          ${TEAM.map(n=>`<option>${n}</option>`).join('')}
-        </select>
-        <select id="f-month">
-          <option value="">Month…</option>
-          ${MONTHS.map(m=>`<option>${m}</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-row">
-        <input id="f-seg" placeholder="e.g. 14-16 or 7 (AM only)" />
-      </div>
-      <button class="btn-add" id="addBtn" onclick="handleAdd()">Add Entry</button>
-    </div>`;
-
-  el.innerHTML = form
-    + renderWeekCard("This Week", fmtWeek(thisWeek), thisMap)
+  el.innerHTML =
+      renderWeekCard("This Week", fmtWeek(thisWeek), thisMap)
     + renderWeekCard("Next Week", fmtWeek(nextWeek), nextMap);
-}
-
-function handleAdd(){
-  const name  = document.getElementById('f-name').value;
-  const month = document.getElementById('f-month').value;
-  const seg   = document.getElementById('f-seg').value;
-  const btn   = document.getElementById('addBtn');
-  btn.disabled = true;
-  addEntry(name, month, seg).finally(()=>{ btn.disabled=false; });
 }
 
 /* ═══════════════════════════════════════════
@@ -689,6 +849,9 @@ function buildCalendar(){
   const today = new Date();
 
   MONTHS.forEach((m, idx) => {
+    // Skip Jan, Feb, Mar
+    if(idx < 3) return;
+
     const year    = 2026;
     const total   = new Date(year, idx+1, 0).getDate();
     const firstDow = new Date(year, idx, 1).getDay(); // 0=Sun
@@ -718,26 +881,45 @@ function buildCalendar(){
       const isToday = (today.getFullYear()===year && today.getMonth()===idx && today.getDate()===d);
       if(isToday) cell.classList.add('today');
 
+      const phName = PUBLIC_HOLIDAYS[phKey(m, d)] || null;
+      const isLieu = phName && phName.includes('in lieu');
+      if(phName){ cell.classList.add(isLieu ? 'is-lieu' : 'is-ph'); }
+
       const numEl = document.createElement('div');
-      numEl.className = 'cal-day-num';
+      numEl.className = 'cal-day-num' + (isLieu ? ' lieu-num' : phName ? ' ph-num' : '');
       numEl.textContent = d;
       cell.appendChild(numEl);
 
+      if(phName){
+        const phEl = document.createElement('div');
+        phEl.className = isLieu ? 'cal-lieu-label' : 'cal-ph-label';
+        phEl.textContent = phName;
+        cell.appendChild(phEl);
+      }
+
       const details = [];
+      const dotsWrap = document.createElement('div');
+      dotsWrap.className = 'cal-dots';
+
       (leaveData[m]||[]).forEach(p => {
         p.segments.forEach((seg, si) => {
           if(extractDays(seg).includes(d)){
             details.push({ name: p.name, seg, id: p.ids[si] });
-            const chip = document.createElement('span');
-            chip.className = 'cal-chip';
-            chip.style.background = getColor(p.name);
-            chip.textContent = p.name.slice(0,3);
-            cell.appendChild(chip);
+            const dot = document.createElement('span');
+            dot.className = 'cal-dot';
+            dot.style.background = getColor(p.name);
+            dot.title = p.name;
+            const circle = document.createElement('span');
+            circle.className = 'cal-dot-circle';
+            dot.appendChild(circle);
+            dot.appendChild(document.createTextNode(p.name));
+            dotsWrap.appendChild(dot);
             cell.classList.add('has-leave');
           }
         });
       });
 
+      cell.appendChild(dotsWrap);
       cell.onclick = () => openDayModal(m, d, details);
       grid.appendChild(cell);
     }
@@ -754,7 +936,8 @@ function buildSummary(){
   const el = document.getElementById('pg-summary');
   el.innerHTML = '';
 
-  const months = Object.keys(leaveData);
+  // Sort months in calendar order
+  const months = MONTHS.filter(m => leaveData[m] && leaveData[m].length > 0);
   if(months.length === 0){
     el.innerHTML = '<div class="loading"><div>No data yet</div></div>';
     return;
@@ -762,30 +945,31 @@ function buildSummary(){
 
   months.forEach(m => {
     const block = document.createElement('div');
-    block.className = 'sum-month';
-    block.innerHTML = `<div class="sum-month-title">${m} 2026</div>`;
+    block.className = 'sum-month-card';
+
+    // Month header
+    const hdr = document.createElement('div');
+    hdr.className = 'sum-month-hdr';
+    hdr.textContent = m + ' 2026';
+    block.appendChild(hdr);
+
+    // Rows: one per person, compact
+    const list = document.createElement('div');
+    list.className = 'sum-list';
 
     (leaveData[m]||[]).forEach(p => {
       const row = document.createElement('div');
-      row.className = 'card';
-      row.style.marginBottom = '6px';
-      row.innerHTML = `
-        <div class="person-row">
-          <div class="avatar" style="background:${getColor(p.name)}">${p.name.slice(0,2)}</div>
-          <div class="person-info">
-            <div class="person-name">${p.name}</div>
-            <div class="pills">
-              ${p.segments.map((s,i) => `
-                <div class="pill">
-                  ${s}
-                  <button class="pill-del" onclick="confirmDelete('${p.ids[i]}','${p.name}','${s}')" title="Remove">×</button>
-                </div>`).join('')}
-            </div>
-          </div>
-        </div>`;
-      block.appendChild(row);
+      row.className = 'sum-row';
+      row.innerHTML =
+        '<div class="sum-avatar" style="background:' + getColor(p.name) + '">' + p.name.slice(0,2) + '</div>' +
+        '<div class="sum-name">' + p.name + '</div>' +
+        '<div class="sum-segs">' +
+          p.segments.map(s => '<span class="sum-pill">' + s + '</span>').join('') +
+        '</div>';
+      list.appendChild(row);
     });
 
+    block.appendChild(list);
     el.appendChild(block);
   });
 }
@@ -795,14 +979,49 @@ function buildSummary(){
 ═══════════════════════════════════════════ */
 function buildManage(){
   const el = document.getElementById('pg-manage');
-  renderManage(el, '');
+  el.innerHTML = '';
 
-  el.querySelector('#manageSearch')?.addEventListener('input', e => {
-    renderManage(el, e.target.value.toLowerCase());
-  });
+  // ── BOX 1: Add Leave ──
+  const addBox = document.createElement('div');
+  addBox.className = 'mgmt-box';
+  addBox.innerHTML =
+    '<div class="mgmt-box-hdr">Add Leave</div>' +
+    '<div class="mgmt-box-body">' +
+      '<div class="mgmt-form-row">' +
+        '<select id="f-name" class="mgmt-select">' +
+          '<option value="">Name…</option>' +
+          TEAM.map(n => '<option>' + n + '</option>').join('') +
+        '</select>' +
+      '</div>' +
+      '<div class="mgmt-form-row">' +
+        '<select id="f-month" class="mgmt-select">' +
+          '<option value="">Month…</option>' +
+          MONTHS.map(m => '<option>' + m + '</option>').join('') +
+        '</select>' +
+        '<select id="f-year" class="mgmt-select">' +
+          '<option value="">Year…</option>' +
+          '<option value="2026">2026</option>' +
+          '<option value="2027">2027</option>' +
+          '<option value="2028">2028</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="mgmt-form-row">' +
+        '<input id="f-seg" class="mgmt-input" placeholder="Dates e.g. 14-16 or 7 (AM only)" />' +
+      '</div>' +
+      '<div id="add-error" class="mgmt-error" style="display:none"></div>' +
+      '<button class="mgmt-btn-add" id="addBtn" onclick="handleAdd()">+ Add Entry</button>' +
+    '</div>';
+  el.appendChild(addBox);
+
+  // ── BOX 2: Edit Leave ──
+  const editBox = document.createElement('div');
+  editBox.className = 'mgmt-box';
+  editBox.id = 'editBox';
+  renderEditBox(editBox, '');
+  el.appendChild(editBox);
 }
 
-function renderManage(el, filter){
+function renderEditBox(el, filter){
   const entries = allEntries.filter(e =>
     !filter ||
     e.name.toLowerCase().includes(filter) ||
@@ -810,29 +1029,83 @@ function renderManage(el, filter){
     e.segment.toLowerCase().includes(filter)
   );
 
-  const listHTML = entries.length === 0
-    ? `<div class="empty" style="padding:20px;text-align:center;">No entries found</div>`
-    : entries.map(e => `
-        <div class="manage-entry">
-          <div class="avatar" style="background:${getColor(e.name)}">${e.name.slice(0,2)}</div>
-          <div class="manage-info">
-            <div class="manage-name">${e.name}</div>
-            <div class="manage-meta">${e.month} 2026 · ${e.segment}</div>
-          </div>
-          <div class="manage-actions">
-            <div class="btn-icon" onclick="openEditModal('${e.id}','${e.segment.replace(/'/g,"&#39;")}')">✏️</div>
-            <div class="btn-icon del" onclick="confirmDelete('${e.id}','${e.name}','${e.segment.replace(/'/g,"&#39;")}')">🗑️</div>
-          </div>
-        </div>`).join('');
-
-  el.innerHTML = `
-    <div class="card-title" style="padding:2px 2px 10px">All Entries (${entries.length})</div>
-    <input class="manage-search" id="manageSearch" placeholder="Search name, month, dates…" value="${filter}">
-    ${listHTML}`;
-
-  el.querySelector('#manageSearch').addEventListener('input', e => {
-    renderManage(el, e.target.value.toLowerCase());
+  const monthOrder = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  entries.sort((a,b) => {
+    const mi = monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month);
+    return mi !== 0 ? mi : a.name.localeCompare(b.name);
   });
+
+  el.innerHTML =
+    '<div class="mgmt-box-hdr">' +
+      'Edit Leave <span class="mgmt-count">' + entries.length + '</span>' +
+    '</div>' +
+    '<div class="mgmt-box-body" style="padding:0">' +
+      '<div style="padding:10px 12px 6px">' +
+        '<input class="mgmt-search" id="manageSearch" placeholder="Search name, month, dates..." value="' + filter.replace(/"/g,'&quot;') + '">' +
+      '</div>' +
+      '<div class="mgmt-list" id="mgmt-list-rows"></div>' +
+    '</div>';
+
+  // Build rows via DOM to avoid all quoting issues
+  const listEl = el.querySelector('#mgmt-list-rows');
+  if(entries.length === 0){
+    listEl.innerHTML = '<div class="empty" style="padding:16px;text-align:center;">No entries found</div>';
+  } else {
+    entries.forEach(e => {
+      const row = document.createElement('div');
+      row.className = 'mgmt-entry';
+      row.innerHTML =
+        '<div class="avatar" style="background:' + getColor(e.name) + ';width:26px;height:26px;font-size:9px">' + e.name.slice(0,2) + '</div>' +
+        '<div class="mgmt-entry-info">' +
+          '<span class="mgmt-entry-name">' + e.name + '</span>' +
+          '<span class="mgmt-entry-meta">' + e.month + ' &middot; ' + e.segment + '</span>' +
+        '</div>' +
+        '<div class="mgmt-entry-actions">' +
+          '<div class="btn-icon" style="width:28px;height:28px;font-size:13px" data-id="' + e.id + '" data-seg="' + e.segment.replace(/"/g,'&quot;') + '" data-action="edit">&#9999;&#65039;</div>' +
+          '<div class="btn-icon del" style="width:28px;height:28px;font-size:13px" data-id="' + e.id + '" data-name="' + e.name + '" data-seg="' + e.segment.replace(/"/g,'&quot;') + '" data-action="del">&#128465;&#65039;</div>' +
+        '</div>';
+      // Attach click handlers via JS (no inline onclick, no quoting issues)
+      row.querySelector('[data-action="edit"]').addEventListener('click', function(){
+        openEditModal(this.dataset.id, this.dataset.seg);
+      });
+      row.querySelector('[data-action="del"]').addEventListener('click', function(){
+        confirmDelete(this.dataset.id, e.name, this.dataset.seg);
+      });
+      listEl.appendChild(row);
+    });
+  }
+
+  el.querySelector('#manageSearch').addEventListener('input', ev => {
+    renderEditBox(el, ev.target.value.toLowerCase());
+  });
+}
+
+function handleAdd(){
+  const name  = document.getElementById('f-name').value;
+  const month = document.getElementById('f-month').value;
+  const year  = document.getElementById('f-year').value;
+  const seg   = document.getElementById('f-seg').value;
+  const errEl = document.getElementById('add-error');
+  const btn   = document.getElementById('addBtn');
+
+  // Clear previous error
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+
+  if(!name || !month || !year || !seg){
+    errEl.textContent = 'Please fill in all fields.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  if(!CAL_YEARS.includes(Number(year))){
+    errEl.textContent = 'Leave application is too far.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  addEntry(name, month, year, seg).finally(() => { btn.disabled = false; });
 }
 
 /* ═══════════════════════════════════════════
