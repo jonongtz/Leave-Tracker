@@ -580,6 +580,10 @@
     margin-bottom: 6px;
     padding: 0 2px;
   }
+
+  /* ── MANAGE DATE INPUTS ── */
+  .mgmt-date-group { display: flex; flex-direction: column; flex: 1; gap: 3px; }
+  .mgmt-date-label { font-size: 11px; color: var(--text2); font-weight: 500; }
 </style>
 </head>
 <body>
@@ -624,107 +628,147 @@ const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 /* ═══════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════ */
-const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const TEAM = ["Dan","JCP","Jon","Joehary","KY","MS","MT","PH","Sam","TL","TW","Yang"];
+const MONTHS  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const PALETTE = ["#ef4444","#3b82f6","#10b981","#a855f7","#f59e0b","#ec4899","#14b8a6","#f97316","#8b5cf6","#06b6d4","#84cc16","#e11d48"];
-
-const colorMap = {};
-TEAM.forEach((n,i) => colorMap[n] = PALETTE[i % PALETTE.length]);
-
-/* Public holidays: key = "Mon-DD", value = short name */
-const PUBLIC_HOLIDAYS = {
-  "Jan-1":  "New Year's Day",
-  "Feb-17": "CNY",
-  "Feb-18": "CNY",
-  "Mar-21": "Hari Raya Puasa",
-  "Apr-3":  "Good Friday",
-  "May-1":  "Labour Day",
-  "May-27": "Hari Raya Haji",
-  "Jun-1":  "Vesak (in lieu)",   // Vesak was Sun 31 May
-  "Aug-10": "National Day (in lieu)", // Natl Day was Sun 9 Aug
-  "Nov-9":  "Deepavali (in lieu)",    // Deepavali was Sun 8 Nov
-  "Dec-25": "Christmas Day",
-};
-function phKey(month, day){ return month + "-" + day; }
-function getColor(name){ return colorMap[name] || "#6b7280"; }
-
-/* Years shown in the calendar — add 2027 here when ready */
 const CAL_YEARS = [2026];
+
+const LEAVE_TYPES = [
+  { value:'annual',   label:'Annual' },
+  { value:'medical',  label:'Medical' },
+  { value:'half_am',  label:'Half Day (AM)' },
+  { value:'half_pm',  label:'Half Day (PM)' },
+  { value:'hl',       label:'HL' },
+  { value:'other',    label:'Other' },
+];
+
+const PUBLIC_HOLIDAYS = {
+  "Jan-1":"New Year's Day","Feb-17":"CNY","Feb-18":"CNY",
+  "Mar-21":"Hari Raya Puasa","Apr-3":"Good Friday",
+  "May-1":"Labour Day","May-27":"Hari Raya Haji",
+  "Jun-1":"Vesak (in lieu)","Aug-10":"National Day (in lieu)",
+  "Nov-9":"Deepavali (in lieu)","Dec-25":"Christmas Day",
+};
 
 /* ═══════════════════════════════════════════
    STATE
 ═══════════════════════════════════════════ */
-let allEntries = []; // flat array of {id, name, month, segment}
-let leaveData  = {}; // { Apr: [ {name, segments:[], ids:[]} ] }
+let employees  = [];  // [{id, name}]
+let allEntries = [];  // raw rows from leave_entries joined with employee name
+let leaveData  = {};  // { "Apr": [ {name, blocks:[{id,start,end,type,note}]} ] }
+let colorMap   = {};
+
+function getColor(name){ return colorMap[name] || "#6b7280"; }
+function phKey(m,d){ return m+"-"+d; }
+function leaveTypeLabel(t){ return (LEAVE_TYPES.find(x=>x.value===t)||{label:t}).label; }
 
 /* ═══════════════════════════════════════════
    DATA LAYER
 ═══════════════════════════════════════════ */
 async function loadData(){
-  setSync("syncing", "syncing…");
-  const { data, error } = await db
+  setSync("syncing","syncing…");
+
+  // Fetch employees
+  const { data: empData, error: empErr } = await db
+    .from('employees').select('*').order('name');
+  if(empErr){ setSync("err","error"); showToast("Failed to load employees: "+empErr.message); return; }
+  employees = empData || [];
+
+  // Build colorMap from employee list
+  colorMap = {};
+  employees.forEach((e,i) => colorMap[e.name] = PALETTE[i % PALETTE.length]);
+
+  // Fetch leave entries joined to employee name
+  const { data: leaveRaw, error: leaveErr } = await db
     .from('leave_entries')
-    .select('*')
-    .order('name');
+    .select('id, employee_id, start_date, end_date, leave_type, note, employees(name)')
+    .order('start_date');
+  if(leaveErr){ setSync("err","error"); showToast("Failed to load leave: "+leaveErr.message); return; }
 
-  if(error){
-    setSync("err","error");
-    showToast("Failed to load: " + error.message);
-    console.error("Supabase error:", error);
-    return;
-  }
+  // Flatten: attach employee name directly
+  allEntries = (leaveRaw || []).map(r => ({
+    id:         r.id,
+    employee_id:r.employee_id,
+    name:       r.employees?.name || '?',
+    start_date: r.start_date,
+    end_date:   r.end_date,
+    leave_type: r.leave_type || 'annual',
+    note:       r.note || '',
+  }));
 
-  if(!data || data.length === 0){
-    console.warn("Supabase returned no rows.");
-  }
-
-  allEntries = data || [];
-  leaveData  = {};
-
-  // Build leaveData only for CAL_YEARS (calendar-visible years)
+  // Build leaveData: group by month, then by person
+  // Only include CAL_YEARS entries
+  leaveData = {};
   allEntries.forEach(row => {
-    const rowYear = row.year || 2026; // default 2026 for old rows without year
-    if(!CAL_YEARS.includes(rowYear)) return; // skip future years not yet on calendar
+    const yr = Number(row.start_date.slice(0,4));
+    if(!CAL_YEARS.includes(yr)) return;
 
-    if(!leaveData[row.month]) leaveData[row.month] = {};
-    if(!leaveData[row.month][row.name])
-      leaveData[row.month][row.name] = { name: row.name, segments: [], ids: [] };
-    leaveData[row.month][row.name].segments.push(row.segment);
-    leaveData[row.month][row.name].ids.push(row.id);
+    const monthIdx = Number(row.start_date.slice(5,7)) - 1;
+    const m = MONTHS[monthIdx];
+
+    if(!leaveData[m]) leaveData[m] = {};
+    if(!leaveData[m][row.name])
+      leaveData[m][row.name] = { name: row.name, blocks: [] };
+    leaveData[m][row.name].blocks.push(row);
   });
-
-  // Convert inner objects → arrays
   Object.keys(leaveData).forEach(m => {
     leaveData[m] = Object.values(leaveData[m]);
   });
 
-  setSync("ok", "synced (" + allEntries.length + ")");
-  console.log("Loaded", allEntries.length, "entries:", allEntries);
+  setSync("ok","synced ("+allEntries.length+")");
+  console.log("Loaded", allEntries.length, "entries");
 }
 
-async function addEntry(name, month, year, segment){
-  segment = segment.trim();
-  if(!name || !month || !year || !segment){ showToast("Fill in all fields"); return; }
+/* Format a leave block as a readable date string: "3–12", "7 (AM)", "15–24 HL" */
+function fmtBlock(block){
+  const s = Number(block.start_date.slice(8));
+  const e = Number(block.end_date.slice(8));
+  let str = s === e ? String(s) : s+"–"+e;
+  if(block.leave_type === 'half_am') str += ' (AM)';
+  else if(block.leave_type === 'half_pm') str += ' (PM)';
+  else if(block.leave_type === 'medical') str += ' (med)';
+  else if(block.leave_type === 'hl') str += ' (HL)';
+  if(block.note) str += ' *';
+  return str;
+}
+
+/* Returns true if date d (1-31) in month m falls within block's range */
+function blockCoversDay(block, m, d){
+  const year = Number(block.start_date.slice(0,4));
+  const blockMonth = MONTHS[Number(block.start_date.slice(5,7))-1];
+  if(blockMonth !== m) return false;
+  const s = Number(block.start_date.slice(8));
+  const e = Number(block.end_date.slice(8));
+  return d >= s && d <= e;
+}
+
+async function addEntry(employeeId, startDate, endDate, leaveType, note){
   setSync("syncing","saving…");
-  const { error } = await db.from('leave_entries').insert({ name, month, year: Number(year), segment });
+  const { error } = await db.from('leave_entries').insert({
+    employee_id: Number(employeeId),
+    start_date:  startDate,
+    end_date:    endDate,
+    leave_type:  leaveType,
+    note:        note || null,
+  });
   if(error){ setSync("err","error"); showToast("Save failed: "+error.message); return; }
-  showToast('Added ' + name + ' – ' + month + ' ' + year + ' ' + segment);
+  showToast("Leave added");
   await refresh();
 }
 
 async function deleteEntry(id){
   setSync("syncing","deleting…");
-  const { error } = await db.from('leave_entries').delete().eq('id', id);
+  const { error } = await db.from('leave_entries').delete().eq('id',id);
   if(error){ setSync("err","error"); showToast("Delete failed"); return; }
   showToast("Entry deleted");
   await refresh();
 }
 
-async function editEntry(id, newSegment){
-  newSegment = newSegment.trim();
-  if(!newSegment){ showToast("Segment cannot be empty"); return; }
+async function editEntry(id, startDate, endDate, leaveType, note){
   setSync("syncing","saving…");
-  const { error } = await db.from('leave_entries').update({ segment: newSegment }).eq('id', id);
+  const { error } = await db.from('leave_entries').update({
+    start_date: startDate, end_date: endDate,
+    leave_type: leaveType, note: note || null,
+  }).eq('id',id);
   if(error){ setSync("err","error"); showToast("Update failed"); return; }
   showToast("Entry updated");
   await refresh();
@@ -732,52 +776,35 @@ async function editEntry(id, newSegment){
 
 async function refresh(){
   await loadData();
-  buildHome();
-  buildCalendar();
-  buildSummary();
-  buildManage();
+  buildHome(); buildCalendar(); buildSummary(); buildManage();
 }
 
 /* ═══════════════════════════════════════════
    HELPERS
 ═══════════════════════════════════════════ */
-function extractDays(seg){
-  if(!seg) return [];
-  const match = seg.match(/(\d+)\s*[-~to]+\s*(\d+)|(\d+)/);
-  if(!match) return [];
-  if(match[1] && match[2]){
-    const a = Number(match[1]), b = Number(match[2]);
-    const arr = [];
-    for(let i=a; i<=b; i++) arr.push(i);
-    return arr;
-  }
-  if(match[3]) return [Number(match[3])];
-  return [];
-}
-
 function getWeek(offset=0){
   const now = new Date();
   const day = now.getDay();
-  const diff = (day===0?-6:1-day) + (offset*7);
+  const diff = (day===0?-6:1-day)+(offset*7);
   const week = [];
-  for(let i=0; i<5; i++){
+  for(let i=0;i<5;i++){
     let d = new Date(now);
-    d.setDate(now.getDate() + diff + i);
-    week.push({ month: MONTHS[d.getMonth()], day: d.getDate(), date: d });
+    d.setDate(now.getDate()+diff+i);
+    week.push({ month:MONTHS[d.getMonth()], day:d.getDate(), date:d,
+                iso: d.toISOString().slice(0,10) });
   }
   return week;
 }
 
 function fmtWeek(week){
-  const a = week[0].date, b = week[4].date;
-  const mo = (d) => d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-  return `${mo(a)} – ${mo(b)}`;
+  const a=week[0].date, b=week[4].date;
+  const mo=d=>d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  return mo(a)+' – '+mo(b);
 }
 
-function setSync(cls, msg){
-  const el = document.getElementById('syncStatus');
-  el.className = cls;
-  el.textContent = msg;
+function setSync(cls,msg){
+  const el=document.getElementById('syncStatus');
+  el.className=cls; el.textContent=msg;
 }
 
 /* ═══════════════════════════════════════════
@@ -785,24 +812,19 @@ function setSync(cls, msg){
 ═══════════════════════════════════════════ */
 function buildHome(){
   const el = document.getElementById('pg-home');
-
   const thisWeek = getWeek(0);
   const nextWeek = getWeek(1);
 
   function getPeopleOnLeave(week){
     const map = {};
-    Object.keys(leaveData).forEach(month => {
-      (leaveData[month]||[]).forEach(p => {
-        p.segments.forEach((seg, i) => {
-          const days = extractDays(seg);
-          week.forEach(w => {
-            if(w.month === month && days.includes(w.day)){
-              if(!map[p.name]) map[p.name] = { segments: new Set(), ids: new Set() };
-              map[p.name].segments.add(seg);
-              map[p.name].ids.add(p.ids[i]);
-            }
-          });
-        });
+    allEntries.forEach(row => {
+      week.forEach(w => {
+        if(row.start_date <= w.iso && w.iso <= row.end_date){
+          if(!map[row.name]) map[row.name] = [];
+          // avoid duplicate blocks for multi-day entries spanning several days
+          if(!map[row.name].find(b=>b.id===row.id))
+            map[row.name].push(row);
+        }
       });
     });
     return map;
@@ -814,24 +836,20 @@ function buildHome(){
   function renderWeekCard(title, label, map){
     const keys = Object.keys(map);
     const body = keys.length === 0
-      ? `<div class="empty">No leave this week 🎉</div>`
-      : keys.map(name => `
-          <div class="person-row">
-            <div class="avatar" style="background:${getColor(name)}">${name.slice(0,2)}</div>
-            <div class="person-info">
-              <div class="person-name">${name}</div>
-              <div class="pills">
-                ${[...map[name].segments].map(s=>`<div class="pill">${s}</div>`).join('')}
-              </div>
-            </div>
-          </div>`).join('');
-
-    return `
-      <div class="card">
-        <div class="card-title">${title}</div>
-        <div class="week-label">${label}</div>
-        ${body}
-      </div>`;
+      ? '<div class="empty">No leave this week 🎉</div>'
+      : keys.map(name =>
+          '<div class="person-row">' +
+            '<div class="avatar" style="background:'+getColor(name)+'">'+name.slice(0,2)+'</div>' +
+            '<div class="person-info">' +
+              '<div class="person-name">'+name+'</div>' +
+              '<div class="pills">' +
+                map[name].map(b=>'<div class="pill">'+fmtBlock(b)+(b.note?' <span title="'+b.note+'">📝</span>':'')+'</div>').join('') +
+              '</div>' +
+            '</div>' +
+          '</div>'
+        ).join('');
+    return '<div class="card"><div class="card-title">'+title+'</div>' +
+           '<div class="week-label">'+label+'</div>'+body+'</div>';
   }
 
   el.innerHTML =
@@ -845,82 +863,80 @@ function buildHome(){
 function buildCalendar(){
   const el = document.getElementById('pg-calendar');
   el.innerHTML = '';
-
   const today = new Date();
 
   MONTHS.forEach((m, idx) => {
-    // Skip Jan, Feb, Mar
-    if(idx < 3) return;
+    if(idx < 3) return; // skip Jan–Mar
 
-    const year    = 2026;
-    const total   = new Date(year, idx+1, 0).getDate();
-    const firstDow = new Date(year, idx, 1).getDay(); // 0=Sun
-    const startOffset = (firstDow === 0 ? 6 : firstDow - 1); // Mon-based
+    const year       = 2026;
+    const total      = new Date(year, idx+1, 0).getDate();
+    const firstDow   = new Date(year, idx, 1).getDay();
+    const startOffset = firstDow === 0 ? 6 : firstDow - 1;
 
     const block = document.createElement('div');
     block.className = 'month-block';
-    block.innerHTML = `<div class="month-label">${m} ${year}</div>
-      <div class="day-headers">
-        ${['M','T','W','T','F','S','S'].map(d=>`<div class="day-hdr">${d}</div>`).join('')}
-      </div>`;
+    block.innerHTML =
+      '<div class="month-label">'+m+' '+year+'</div>' +
+      '<div class="day-headers">'+
+        ['M','T','W','T','F','S','S'].map(d=>'<div class="day-hdr">'+d+'</div>').join('')+
+      '</div>';
 
     const grid = document.createElement('div');
     grid.className = 'cal-grid';
 
-    // blank cells before month start
-    for(let i=0; i<startOffset; i++){
-      const blank = document.createElement('div');
-      blank.className = 'cal-day empty-day';
+    for(let i=0;i<startOffset;i++){
+      const blank=document.createElement('div');
+      blank.className='cal-day empty-day';
       grid.appendChild(blank);
     }
 
-    for(let d=1; d<=total; d++){
+    for(let d=1;d<=total;d++){
       const cell = document.createElement('div');
       cell.className = 'cal-day';
 
-      const isToday = (today.getFullYear()===year && today.getMonth()===idx && today.getDate()===d);
+      const isToday = today.getFullYear()===year && today.getMonth()===idx && today.getDate()===d;
       if(isToday) cell.classList.add('today');
 
-      const phName = PUBLIC_HOLIDAYS[phKey(m, d)] || null;
+      const phName = PUBLIC_HOLIDAYS[phKey(m,d)] || null;
       const isLieu = phName && phName.includes('in lieu');
-      if(phName){ cell.classList.add(isLieu ? 'is-lieu' : 'is-ph'); }
+      if(phName) cell.classList.add(isLieu?'is-lieu':'is-ph');
 
       const numEl = document.createElement('div');
-      numEl.className = 'cal-day-num' + (isLieu ? ' lieu-num' : phName ? ' ph-num' : '');
+      numEl.className = 'cal-day-num'+(isLieu?' lieu-num':phName?' ph-num':'');
       numEl.textContent = d;
       cell.appendChild(numEl);
 
       if(phName){
         const phEl = document.createElement('div');
-        phEl.className = isLieu ? 'cal-lieu-label' : 'cal-ph-label';
+        phEl.className = isLieu?'cal-lieu-label':'cal-ph-label';
         phEl.textContent = phName;
         cell.appendChild(phEl);
       }
 
-      const details = [];
+      // Find all blocks covering this day
+      const isoDay = year+'-'+(String(idx+1).padStart(2,'0'))+'-'+(String(d).padStart(2,'0'));
+      const dayBlocks = allEntries.filter(r =>
+        r.start_date <= isoDay && isoDay <= r.end_date
+      );
+
       const dotsWrap = document.createElement('div');
       dotsWrap.className = 'cal-dots';
 
-      (leaveData[m]||[]).forEach(p => {
-        p.segments.forEach((seg, si) => {
-          if(extractDays(seg).includes(d)){
-            details.push({ name: p.name, seg, id: p.ids[si] });
-            const dot = document.createElement('span');
-            dot.className = 'cal-dot';
-            dot.style.background = getColor(p.name);
-            dot.title = p.name;
-            const circle = document.createElement('span');
-            circle.className = 'cal-dot-circle';
-            dot.appendChild(circle);
-            dot.appendChild(document.createTextNode(p.name));
-            dotsWrap.appendChild(dot);
-            cell.classList.add('has-leave');
-          }
-        });
+      dayBlocks.forEach(row => {
+        const dot = document.createElement('span');
+        dot.className = 'cal-dot';
+        dot.style.background = getColor(row.name);
+        dot.title = row.name;
+        const circle = document.createElement('span');
+        circle.className = 'cal-dot-circle';
+        dot.appendChild(circle);
+        dot.appendChild(document.createTextNode(row.name));
+        dotsWrap.appendChild(dot);
+        cell.classList.add('has-leave');
       });
 
       cell.appendChild(dotsWrap);
-      cell.onclick = () => openDayModal(m, d, details);
+      cell.onclick = () => openDayModal(m, d, year, dayBlocks);
       grid.appendChild(cell);
     }
 
@@ -936,7 +952,6 @@ function buildSummary(){
   const el = document.getElementById('pg-summary');
   el.innerHTML = '';
 
-  // Sort months in calendar order
   const months = MONTHS.filter(m => leaveData[m] && leaveData[m].length > 0);
   if(months.length === 0){
     el.innerHTML = '<div class="loading"><div>No data yet</div></div>';
@@ -947,24 +962,30 @@ function buildSummary(){
     const block = document.createElement('div');
     block.className = 'sum-month-card';
 
-    // Month header
     const hdr = document.createElement('div');
     hdr.className = 'sum-month-hdr';
     hdr.textContent = m + ' 2026';
     block.appendChild(hdr);
 
-    // Rows: one per person, compact
     const list = document.createElement('div');
     list.className = 'sum-list';
 
-    (leaveData[m]||[]).forEach(p => {
+    // Sort people alphabetically within month
+    const people = [...(leaveData[m]||[])].sort((a,b)=>a.name.localeCompare(b.name));
+    people.forEach(p => {
       const row = document.createElement('div');
       row.className = 'sum-row';
       row.innerHTML =
-        '<div class="sum-avatar" style="background:' + getColor(p.name) + '">' + p.name.slice(0,2) + '</div>' +
-        '<div class="sum-name">' + p.name + '</div>' +
+        '<div class="sum-avatar" style="background:'+getColor(p.name)+'">'+p.name.slice(0,2)+'</div>' +
+        '<div class="sum-name">'+p.name+'</div>' +
         '<div class="sum-segs">' +
-          p.segments.map(s => '<span class="sum-pill">' + s + '</span>').join('') +
+          p.blocks.map(b => {
+            let label = fmtBlock(b);
+            let color = b.leave_type==='medical'?'#f59e0b':
+                        b.leave_type==='hl'?'#a855f7':
+                        b.leave_type==='half_am'||b.leave_type==='half_pm'?'#10b981':'';
+            return '<span class="sum-pill"'+(color?' style="border-color:'+color+';color:'+color+'"':'')+'>'+label+'</span>';
+          }).join('') +
         '</div>';
       list.appendChild(row);
     });
@@ -984,29 +1005,29 @@ function buildManage(){
   // ── BOX 1: Add Leave ──
   const addBox = document.createElement('div');
   addBox.className = 'mgmt-box';
+
+  const typeOptions = LEAVE_TYPES.map(t=>'<option value="'+t.value+'">'+t.label+'</option>').join('');
+  const empOptions  = employees.map(e=>'<option value="'+e.id+'">'+e.name+'</option>').join('');
+
   addBox.innerHTML =
     '<div class="mgmt-box-hdr">Add Leave</div>' +
     '<div class="mgmt-box-body">' +
       '<div class="mgmt-form-row">' +
-        '<select id="f-name" class="mgmt-select">' +
-          '<option value="">Name…</option>' +
-          TEAM.map(n => '<option>' + n + '</option>').join('') +
-        '</select>' +
+        '<select id="f-emp" class="mgmt-select"><option value="">Name…</option>'+empOptions+'</select>' +
+        '<select id="f-type" class="mgmt-select">'+typeOptions+'</select>' +
       '</div>' +
       '<div class="mgmt-form-row">' +
-        '<select id="f-month" class="mgmt-select">' +
-          '<option value="">Month…</option>' +
-          MONTHS.map(m => '<option>' + m + '</option>').join('') +
-        '</select>' +
-        '<select id="f-year" class="mgmt-select">' +
-          '<option value="">Year…</option>' +
-          '<option value="2026">2026</option>' +
-          '<option value="2027">2027</option>' +
-          '<option value="2028">2028</option>' +
-        '</select>' +
+        '<div class="mgmt-date-group">' +
+          '<label class="mgmt-date-label">From</label>' +
+          '<input id="f-start" type="date" class="mgmt-input" />' +
+        '</div>' +
+        '<div class="mgmt-date-group">' +
+          '<label class="mgmt-date-label">To</label>' +
+          '<input id="f-end" type="date" class="mgmt-input" />' +
+        '</div>' +
       '</div>' +
       '<div class="mgmt-form-row">' +
-        '<input id="f-seg" class="mgmt-input" placeholder="Dates e.g. 14-16 or 7 (AM only)" />' +
+        '<input id="f-note" class="mgmt-input" placeholder="Note (optional)" />' +
       '</div>' +
       '<div id="add-error" class="mgmt-error" style="display:none"></div>' +
       '<button class="mgmt-btn-add" id="addBtn" onclick="handleAdd()">+ Add Entry</button>' +
@@ -1025,28 +1046,22 @@ function renderEditBox(el, filter){
   const entries = allEntries.filter(e =>
     !filter ||
     e.name.toLowerCase().includes(filter) ||
-    e.month.toLowerCase().includes(filter) ||
-    e.segment.toLowerCase().includes(filter)
+    e.start_date.includes(filter) ||
+    e.leave_type.toLowerCase().includes(filter) ||
+    (e.note||'').toLowerCase().includes(filter)
   );
 
-  const monthOrder = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  entries.sort((a,b) => {
-    const mi = monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month);
-    return mi !== 0 ? mi : a.name.localeCompare(b.name);
-  });
+  entries.sort((a,b) => a.start_date.localeCompare(b.start_date) || a.name.localeCompare(b.name));
 
   el.innerHTML =
-    '<div class="mgmt-box-hdr">' +
-      'Edit Leave <span class="mgmt-count">' + entries.length + '</span>' +
-    '</div>' +
+    '<div class="mgmt-box-hdr">Edit Leave <span class="mgmt-count">'+entries.length+'</span></div>' +
     '<div class="mgmt-box-body" style="padding:0">' +
       '<div style="padding:10px 12px 6px">' +
-        '<input class="mgmt-search" id="manageSearch" placeholder="Search name, month, dates..." value="' + filter.replace(/"/g,'&quot;') + '">' +
+        '<input class="mgmt-search" id="manageSearch" placeholder="Search name, date, type…" value="'+filter.replace(/"/g,'&quot;')+'">' +
       '</div>' +
       '<div class="mgmt-list" id="mgmt-list-rows"></div>' +
     '</div>';
 
-  // Build rows via DOM to avoid all quoting issues
   const listEl = el.querySelector('#mgmt-list-rows');
   if(entries.length === 0){
     listEl.innerHTML = '<div class="empty" style="padding:16px;text-align:center;">No entries found</div>';
@@ -1054,23 +1069,25 @@ function renderEditBox(el, filter){
     entries.forEach(e => {
       const row = document.createElement('div');
       row.className = 'mgmt-entry';
+
+      const s = e.start_date.slice(5).replace('-','/');
+      const en = e.end_date.slice(5).replace('-','/');
+      const dateStr = s===en ? s : s+' – '+en;
+      const typeStr = leaveTypeLabel(e.leave_type);
+
       row.innerHTML =
-        '<div class="avatar" style="background:' + getColor(e.name) + ';width:26px;height:26px;font-size:9px">' + e.name.slice(0,2) + '</div>' +
+        '<div class="avatar" style="background:'+getColor(e.name)+';width:26px;height:26px;font-size:9px">'+e.name.slice(0,2)+'</div>' +
         '<div class="mgmt-entry-info">' +
-          '<span class="mgmt-entry-name">' + e.name + '</span>' +
-          '<span class="mgmt-entry-meta">' + e.month + ' &middot; ' + e.segment + '</span>' +
+          '<span class="mgmt-entry-name">'+e.name+'</span>' +
+          '<span class="mgmt-entry-meta">'+dateStr+' · '+typeStr+(e.note?' · '+e.note:'')+'</span>' +
         '</div>' +
         '<div class="mgmt-entry-actions">' +
-          '<div class="btn-icon" style="width:28px;height:28px;font-size:13px" data-id="' + e.id + '" data-seg="' + e.segment.replace(/"/g,'&quot;') + '" data-action="edit">&#9999;&#65039;</div>' +
-          '<div class="btn-icon del" style="width:28px;height:28px;font-size:13px" data-id="' + e.id + '" data-name="' + e.name + '" data-seg="' + e.segment.replace(/"/g,'&quot;') + '" data-action="del">&#128465;&#65039;</div>' +
+          '<div class="btn-icon" style="width:28px;height:28px;font-size:13px" data-action="edit">&#9999;&#65039;</div>' +
+          '<div class="btn-icon del" style="width:28px;height:28px;font-size:13px" data-action="del">&#128465;&#65039;</div>' +
         '</div>';
-      // Attach click handlers via JS (no inline onclick, no quoting issues)
-      row.querySelector('[data-action="edit"]').addEventListener('click', function(){
-        openEditModal(this.dataset.id, this.dataset.seg);
-      });
-      row.querySelector('[data-action="del"]').addEventListener('click', function(){
-        confirmDelete(this.dataset.id, e.name, this.dataset.seg);
-      });
+
+      row.querySelector('[data-action="edit"]').addEventListener('click', ()=> openEditModal(e));
+      row.querySelector('[data-action="del"]').addEventListener('click',  ()=> confirmDelete(e.id, e.name, dateStr));
       listEl.appendChild(row);
     });
   }
@@ -1081,31 +1098,36 @@ function renderEditBox(el, filter){
 }
 
 function handleAdd(){
-  const name  = document.getElementById('f-name').value;
-  const month = document.getElementById('f-month').value;
-  const year  = document.getElementById('f-year').value;
-  const seg   = document.getElementById('f-seg').value;
+  const empId = document.getElementById('f-emp').value;
+  const type  = document.getElementById('f-type').value;
+  const start = document.getElementById('f-start').value;
+  const end   = document.getElementById('f-end').value;
+  const note  = document.getElementById('f-note').value.trim();
   const errEl = document.getElementById('add-error');
   const btn   = document.getElementById('addBtn');
 
-  // Clear previous error
   errEl.style.display = 'none';
   errEl.textContent = '';
 
-  if(!name || !month || !year || !seg){
-    errEl.textContent = 'Please fill in all fields.';
+  if(!empId || !start || !end){
+    errEl.textContent = 'Please fill in name, start date and end date.';
     errEl.style.display = 'block';
     return;
   }
-
-  if(!CAL_YEARS.includes(Number(year))){
-    errEl.textContent = 'Leave application is too far.';
+  if(end < start){
+    errEl.textContent = 'End date cannot be before start date.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const yr = Number(start.slice(0,4));
+  if(!CAL_YEARS.includes(yr)){
+    errEl.textContent = 'Leave application is too far ahead.';
     errEl.style.display = 'block';
     return;
   }
 
   btn.disabled = true;
-  addEntry(name, month, year, seg).finally(() => { btn.disabled = false; });
+  addEntry(empId, start, end, type, note).finally(()=>{ btn.disabled=false; });
 }
 
 /* ═══════════════════════════════════════════
@@ -1122,46 +1144,96 @@ function handleModalOverlay(e){
   if(e.target === document.getElementById('modal')) closeModal();
 }
 
-function openDayModal(month, day, details){
-  const rows = details.length === 0
-    ? `<div class="empty">No one on leave</div>`
-    : details.map(d => `
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <div class="avatar" style="background:${getColor(d.name)};width:26px;height:26px;font-size:9px">${d.name.slice(0,2)}</div>
-          <div style="flex:1">
-            <div style="font-weight:600;font-size:13px">${d.name}</div>
-            <div style="font-size:11px;color:var(--text2);font-family:'DM Mono',monospace">${d.seg}</div>
-          </div>
-          <div class="btn-icon del" style="width:26px;height:26px;font-size:12px" onclick="closeModal();confirmDelete('${d.id}','${d.name}','${d.seg}')">🗑️</div>
-        </div>`).join('');
+function openDayModal(m, d, year, blocks){
+  const modalEl = document.getElementById('modalBox');
+  const overlay = document.getElementById('modal');
 
-  openModal(`
-    <div class="modal-title">📅 ${month} ${day}, 2026</div>
-    <div class="modal-body">${rows}</div>
-    <div class="modal-actions">
-      <button class="btn-modal btn-cancel" onclick="closeModal()">Close</button>
-    </div>`);
+  const title = document.createElement('div');
+  title.className = 'modal-title';
+  title.textContent = '📅 ' + m + ' ' + d + ', ' + year;
+
+  const body = document.createElement('div');
+  body.className = 'modal-body';
+
+  if(blocks.length === 0){
+    body.innerHTML = '<div class="empty">No one on leave</div>';
+  } else {
+    blocks.forEach(b => {
+      const item = document.createElement('div');
+      item.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px';
+      item.innerHTML =
+        '<div class="avatar" style="background:'+getColor(b.name)+';width:26px;height:26px;font-size:9px">'+b.name.slice(0,2)+'</div>' +
+        '<div style="flex:1">' +
+          '<div style="font-weight:600;font-size:13px">'+b.name+'</div>' +
+          '<div style="font-size:11px;color:var(--text2)">'+leaveTypeLabel(b.leave_type)+(b.note?' · '+b.note:'')+'</div>' +
+        '</div>';
+      const delBtn = document.createElement('div');
+      delBtn.className = 'btn-icon del';
+      delBtn.style.cssText = 'width:26px;height:26px;font-size:12px';
+      delBtn.textContent = '🗑️';
+      delBtn.addEventListener('click', ()=>{ closeModal(); confirmDelete(b.id, b.name, fmtBlock(b)); });
+      item.appendChild(delBtn);
+      body.appendChild(item);
+    });
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'modal-actions';
+  actions.innerHTML = '<button class="btn-modal btn-cancel" onclick="closeModal()">Close</button>';
+
+  modalEl.innerHTML = '';
+  modalEl.appendChild(title);
+  modalEl.appendChild(body);
+  modalEl.appendChild(actions);
+  overlay.classList.add('open');
 }
 
-function confirmDelete(id, name, seg){
-  openModal(`
-    <div class="modal-title">Delete Entry?</div>
-    <div class="modal-body">Remove <b>${name}</b> – <span style="font-family:'DM Mono',monospace">${seg}</span>?<br>This cannot be undone.</div>
-    <div class="modal-actions">
-      <button class="btn-modal btn-cancel" onclick="closeModal()">Cancel</button>
-      <button class="btn-modal btn-confirm-del" onclick="closeModal();deleteEntry('${id}')">Delete</button>
-    </div>`);
+function confirmDelete(id, name, dateStr){
+  openModal(
+    '<div class="modal-title">Delete Entry?</div>' +
+    '<div class="modal-body">Remove <b>'+name+'</b> – <span style="font-family:monospace">'+dateStr+'</span>?<br>This cannot be undone.</div>' +
+    '<div class="modal-actions">' +
+      '<button class="btn-modal btn-cancel" onclick="closeModal()">Cancel</button>' +
+      '<button class="btn-modal btn-confirm-del" id="delConfirmBtn">Delete</button>' +
+    '</div>'
+  );
+  document.getElementById('delConfirmBtn').addEventListener('click', ()=>{ closeModal(); deleteEntry(id); });
 }
 
-function openEditModal(id, currentSeg){
-  openModal(`
-    <div class="modal-title">Edit Entry</div>
-    <input class="edit-input" id="editInput" value="${currentSeg}" placeholder="e.g. 14-16 or 7 (AM only)" />
-    <div class="modal-actions">
-      <button class="btn-modal btn-cancel" onclick="closeModal()">Cancel</button>
-      <button class="btn-modal btn-confirm-save" onclick="closeModal();editEntry('${id}',document.getElementById('editInput').value)">Save</button>
-    </div>`);
-  setTimeout(()=>document.getElementById('editInput')?.focus(), 100);
+function openEditModal(entry){
+  const empOptions = employees.map(e=>
+    '<option value="'+e.id+'"'+(e.id===entry.employee_id?' selected':'')+'>'+e.name+'</option>'
+  ).join('');
+  const typeOptions = LEAVE_TYPES.map(t=>
+    '<option value="'+t.value+'"'+(t.value===entry.leave_type?' selected':'')+'>'+t.label+'</option>'
+  ).join('');
+
+  openModal(
+    '<div class="modal-title">Edit Entry</div>' +
+    '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">' +
+      '<select id="ei-emp" class="edit-input" style="margin:0">'+empOptions+'</select>' +
+      '<div style="display:flex;gap:8px">' +
+        '<div style="flex:1"><div style="font-size:11px;color:var(--text2);margin-bottom:3px">From</div>' +
+          '<input id="ei-start" type="date" class="edit-input" style="margin:0;width:100%" value="'+entry.start_date+'"></div>' +
+        '<div style="flex:1"><div style="font-size:11px;color:var(--text2);margin-bottom:3px">To</div>' +
+          '<input id="ei-end" type="date" class="edit-input" style="margin:0;width:100%" value="'+entry.end_date+'"></div>' +
+      '</div>' +
+      '<select id="ei-type" class="edit-input" style="margin:0">'+typeOptions+'</select>' +
+      '<input id="ei-note" class="edit-input" style="margin:0" placeholder="Note (optional)" value="'+(entry.note||'')+'">' +
+    '</div>' +
+    '<div class="modal-actions">' +
+      '<button class="btn-modal btn-cancel" onclick="closeModal()">Cancel</button>' +
+      '<button class="btn-modal btn-confirm-save" id="editSaveBtn">Save</button>' +
+    '</div>'
+  );
+  document.getElementById('editSaveBtn').addEventListener('click', ()=>{
+    const s = document.getElementById('ei-start').value;
+    const e = document.getElementById('ei-end').value;
+    const t = document.getElementById('ei-type').value;
+    const n = document.getElementById('ei-note').value;
+    closeModal();
+    editEntry(entry.id, s, e, t, n);
+  });
 }
 
 /* ═══════════════════════════════════════════
@@ -1170,11 +1242,10 @@ function openEditModal(id, currentSeg){
 let currentTab = 0;
 const pagesEl  = document.getElementById('pages');
 const tabBtns  = document.querySelectorAll('.tab-btn');
-
 function goTab(i){
   currentTab = i;
-  pagesEl.style.transform = `translateX(-${i*25}%)`;
-  tabBtns.forEach((b,j) => b.classList.toggle('active', j===i));
+  pagesEl.style.transform = 'translateX(-'+(i*25)+'%)';
+  tabBtns.forEach((b,j)=>b.classList.toggle('active',j===i));
 }
 
 /* ═══════════════════════════════════════════
@@ -1190,19 +1261,17 @@ function showToast(msg){
 }
 
 /* ═══════════════════════════════════════════
-   INIT — show loaders then fetch
+   INIT
 ═══════════════════════════════════════════ */
 ['pg-home','pg-calendar','pg-summary','pg-manage'].forEach(id => {
   document.getElementById(id).innerHTML =
-    `<div class="loading"><div class="spinner"></div><div>Loading…</div></div>`;
+    '<div class="loading"><div class="spinner"></div><div>Loading…</div></div>';
 });
 
 loadData().then(() => {
-  buildHome();
-  buildCalendar();
-  buildSummary();
-  buildManage();
+  buildHome(); buildCalendar(); buildSummary(); buildManage();
 });
+
 </script>
 </body>
 </html>
