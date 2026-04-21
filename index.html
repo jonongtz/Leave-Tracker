@@ -581,6 +581,31 @@
     padding: 0 2px;
   }
 
+  /* ── CALENDAR YEAR SELECTOR ── */
+  .cal-year-bar {
+    display: flex;
+    gap: 6px;
+    padding: 0 2px 12px;
+  }
+  .cal-year-btn {
+    flex: 1;
+    text-align: center;
+    padding: 8px 0;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .cal-year-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
   /* ── AUDIT LOG ── */
   .audit-row {
     display: flex;
@@ -618,6 +643,15 @@
     font-size: 10px;
     color: var(--text2);
     font-family: 'DM Mono', monospace;
+  }
+  .audit-num {
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'DM Mono', monospace;
+    color: var(--text2);
+    width: 28px;
+    flex-shrink: 0;
+    padding-top: 2px;
   }
 
   /* ── MANAGE DATE INPUTS ── */
@@ -669,7 +703,9 @@ const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 ═══════════════════════════════════════════ */
 const MONTHS  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const PALETTE = ["#ef4444","#3b82f6","#10b981","#a855f7","#f59e0b","#ec4899","#14b8a6","#f97316","#8b5cf6","#06b6d4","#84cc16","#e11d48"];
-const CAL_YEARS = [2026];
+// Always show current year + next 2 years, auto-updates as years roll over
+const THIS_YEAR = new Date().getFullYear();
+const CAL_YEARS = [THIS_YEAR, THIS_YEAR + 1, THIS_YEAR + 2];
 
 const LEAVE_TYPES = [
   { value:'annual',   label:'Annual' },
@@ -680,13 +716,55 @@ const LEAVE_TYPES = [
   { value:'other',    label:'Other' },
 ];
 
-const PUBLIC_HOLIDAYS = {
-  "Jan-1":"New Year's Day","Feb-17":"CNY","Feb-18":"CNY",
-  "Mar-21":"Hari Raya Puasa","Apr-3":"Good Friday",
-  "May-1":"Labour Day","May-27":"Hari Raya Haji",
-  "Jun-1":"Vesak (in lieu)","Aug-10":"National Day (in lieu)",
-  "Nov-9":"Deepavali (in lieu)","Dec-25":"Christmas Day",
+// Singapore public holidays by year.
+// Dates for Islamic holidays (Hari Raya, Haji) shift each year.
+// Add new years here as needed — only needs updating once a year.
+const PUBLIC_HOLIDAYS_BY_YEAR = {
+  2026: {
+    "Jan-1":"New Year's Day",
+    "Feb-17":"CNY","Feb-18":"CNY",
+    "Mar-21":"Hari Raya Puasa",
+    "Apr-3":"Good Friday",
+    "May-1":"Labour Day",
+    "May-27":"Hari Raya Haji",
+    "Jun-1":"Vesak (in lieu)",        // Vesak 31 May (Sun)
+    "Aug-10":"National Day (in lieu)", // Natl Day 9 Aug (Sun)
+    "Nov-9":"Deepavali (in lieu)",     // Deepavali 8 Nov (Sun)
+    "Dec-25":"Christmas Day",
+  },
+  2027: {
+    "Jan-1":"New Year's Day",
+    "Feb-8":"CNY","Feb-9":"CNY",
+    "Mar-10":"Hari Raya Puasa",
+    "Mar-26":"Good Friday",
+    "May-1":"Labour Day",
+    "May-17":"Hari Raya Haji",
+    "May-20":"Vesak Day",
+    "Aug-9":"National Day",
+    "Oct-29":"Deepavali",
+    "Dec-25":"Christmas Day",
+    "Dec-27":"Christmas (in lieu)",   // Christmas 25 Dec (Sat)
+  },
+  2028: {
+    "Jan-1":"New Year's Day",
+    "Jan-26":"CNY","Jan-27":"CNY",
+    "Feb-28":"Hari Raya Puasa",
+    "Apr-14":"Good Friday",
+    "May-1":"Labour Day",
+    "May-5":"Hari Raya Haji",
+    "May-8":"Vesak Day",
+    "Aug-9":"National Day",
+    "Nov-17":"Deepavali",
+    "Dec-25":"Christmas Day",
+    "Dec-26":"Christmas (in lieu)",   // Christmas 25 Dec (Mon) → Tue off
+  },
 };
+
+// Helper — returns PH name for a given year/month/day, or null
+function getPublicHoliday(year, month, day){
+  const map = PUBLIC_HOLIDAYS_BY_YEAR[year] || {};
+  return map[month+'-'+day] || null;
+}
 
 /* ═══════════════════════════════════════════
    STATE
@@ -695,7 +773,8 @@ let employees  = [];  // [{id, name}]
 let allEntries = [];  // raw rows from leave_entries joined with employee name
 let leaveData  = {};  // { "Apr": [ {name, blocks:[{id,start,end,type,note}]} ] }
 let colorMap   = {};
-let auditLog   = [];  // last 20 audit entries
+let auditLog      = [];  // last 20 audit entries (newest first)
+let auditLogTotal = 0;   // total count ever, for sequential numbering
 
 const MANAGE_CODE = 'IDTE';   // ← change this to whatever code you want
 let manageUnlocked = false;
@@ -757,13 +836,14 @@ async function loadData(){
     leaveData[m] = Object.values(leaveData[m]);
   });
 
-  // Fetch last 20 audit log entries
-  const { data: auditRaw } = await db
+  // Fetch last 20 audit log entries (newest first) + total count for numbering
+  const { data: auditRaw, count: auditTotal } = await db
     .from('audit_log')
-    .select('*')
+    .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
     .limit(20);
   auditLog = auditRaw || [];
+  auditLogTotal = auditTotal || 0;
 
   setSync("ok","synced ("+allEntries.length+")");
   console.log("Loaded", allEntries.length, "entries");
@@ -923,7 +1003,11 @@ function buildHome(){
     empty.textContent = 'No recent activity';
     recentCard.appendChild(empty);
   } else {
-    auditLog.forEach(entry => {
+    // auditLog is newest-first; number them so #1 = oldest ever
+    // auditLogTotal = total rows in DB; the oldest in this window = auditLogTotal - 19
+    auditLog.forEach((entry, i) => {
+      const entryNumber = auditLogTotal - i; // newest gets highest number
+
       const row = document.createElement('div');
       row.className = 'audit-row';
 
@@ -945,6 +1029,10 @@ function buildHome(){
         hour:'2-digit', minute:'2-digit', hour12:false
       });
 
+      const numBadge = document.createElement('div');
+      numBadge.className = 'audit-num';
+      numBadge.textContent = '#' + entryNumber;
+
       const avatar = document.createElement('div');
       avatar.className = 'avatar';
       avatar.style.cssText = 'background:'+getColor(entry.employee_name)+';width:26px;height:26px;font-size:9px;flex-shrink:0';
@@ -960,6 +1048,7 @@ function buildHome(){
         '</div>' +
         '<div class="audit-time">'+timeStr+'</div>';
 
+      row.appendChild(numBadge);
       row.appendChild(avatar);
       row.appendChild(info);
       recentCard.appendChild(row);
@@ -972,15 +1061,34 @@ function buildHome(){
 /* ═══════════════════════════════════════════
    BUILD CALENDAR
 ═══════════════════════════════════════════ */
+let calYear = THIS_YEAR; // currently selected calendar year
+
 function buildCalendar(){
   const el = document.getElementById('pg-calendar');
   el.innerHTML = '';
   const today = new Date();
 
-  MONTHS.forEach((m, idx) => {
-    if(idx < 3) return; // skip Jan–Mar
+  // Year selector bar
+  const yearBar = document.createElement('div');
+  yearBar.className = 'cal-year-bar';
+  CAL_YEARS.forEach(yr => {
+    const btn = document.createElement('div');
+    btn.className = 'cal-year-btn' + (yr === calYear ? ' active' : '');
+    btn.textContent = yr;
+    btn.addEventListener('click', () => {
+      calYear = yr;
+      buildCalendar();
+    });
+    yearBar.appendChild(btn);
+  });
+  el.appendChild(yearBar);
 
-    const year       = 2026;
+  MONTHS.forEach((m, idx) => {
+    // For 2026, skip Jan–Mar (app went live mid-year)
+    // For future years, show all 12 months
+    if(calYear === 2026 && idx < 3) return;
+
+    const year       = calYear;
     const total      = new Date(year, idx+1, 0).getDate();
     const firstDow   = new Date(year, idx, 1).getDay();
     const startOffset = firstDow === 0 ? 6 : firstDow - 1;
@@ -1006,10 +1114,10 @@ function buildCalendar(){
       const cell = document.createElement('div');
       cell.className = 'cal-day';
 
-      const isToday = today.getFullYear()===year && today.getMonth()===idx && today.getDate()===d;
+      const isToday = today.getFullYear()===calYear && today.getMonth()===idx && today.getDate()===d;
       if(isToday) cell.classList.add('today');
 
-      const phName = PUBLIC_HOLIDAYS[phKey(m,d)] || null;
+      const phName = getPublicHoliday(calYear, m, d);
       const isLieu = phName && phName.includes('in lieu');
       if(phName) cell.classList.add(isLieu?'is-lieu':'is-ph');
 
@@ -1300,12 +1408,6 @@ function openDayModal(m, d, year, blocks){
           '<div style="font-weight:600;font-size:13px">'+b.name+'</div>' +
           '<div style="font-size:11px;color:var(--text2)">'+leaveTypeLabel(b.leave_type)+(b.note?' · '+b.note:'')+'</div>' +
         '</div>';
-      const delBtn = document.createElement('div');
-      delBtn.className = 'btn-icon del';
-      delBtn.style.cssText = 'width:26px;height:26px;font-size:12px';
-      delBtn.textContent = '🗑️';
-      delBtn.addEventListener('click', ()=>{ closeModal(); confirmDelete(b.id, b.name, fmtBlock(b)); });
-      item.appendChild(delBtn);
       body.appendChild(item);
     });
   }
