@@ -708,12 +708,9 @@ const THIS_YEAR = new Date().getFullYear();
 const CAL_YEARS = [THIS_YEAR, THIS_YEAR + 1, THIS_YEAR + 2];
 
 const LEAVE_TYPES = [
-  { value:'annual',   label:'Annual' },
-  { value:'medical',  label:'Medical' },
-  { value:'half_am',  label:'Half Day (AM)' },
-  { value:'half_pm',  label:'Half Day (PM)' },
-  { value:'hl',       label:'HL' },
-  { value:'other',    label:'Other' },
+  { value:'Full', label:'Full Day' },
+  { value:'AM',   label:'AM' },
+  { value:'PM',   label:'PM' },
 ];
 
 // Singapore public holidays by year.
@@ -781,7 +778,7 @@ let manageUnlocked = false;
 
 function getColor(name){ return colorMap[name] || "#6b7280"; }
 function phKey(m,d){ return m+"-"+d; }
-function leaveTypeLabel(t){ return (LEAVE_TYPES.find(x=>x.value===t)||{label:t}).label; }
+function leaveTypeLabel(t){ return t === 'AM' ? 'Half Day (AM)' : t === 'PM' ? 'Half Day (PM)' : 'Full Day'; }
 
 /* ═══════════════════════════════════════════
    DATA LAYER
@@ -813,7 +810,7 @@ async function loadData(){
     name:       r.employees?.name || '?',
     start_date: r.start_date,
     end_date:   r.end_date,
-    leave_type: r.leave_type || 'annual',
+    leave_type: r.leave_type || 'Full',
     note:       r.note || '',
   }));
 
@@ -854,10 +851,8 @@ function fmtBlock(block){
   const s = Number(block.start_date.slice(8));
   const e = Number(block.end_date.slice(8));
   let str = s === e ? String(s) : s+"–"+e;
-  if(block.leave_type === 'half_am') str += ' (AM)';
-  else if(block.leave_type === 'half_pm') str += ' (PM)';
-  else if(block.leave_type === 'medical') str += ' (med)';
-  else if(block.leave_type === 'hl') str += ' (HL)';
+  if(block.leave_type === 'AM') str += ' (AM)';
+  else if(block.leave_type === 'PM') str += ' (PM)';
   if(block.note) str += ' *';
   return str;
 }
@@ -1201,9 +1196,8 @@ function buildSummary(){
         '<div class="sum-segs">' +
           p.blocks.map(b => {
             let label = fmtBlock(b);
-            let color = b.leave_type==='medical'?'#f59e0b':
-                        b.leave_type==='hl'?'#a855f7':
-                        b.leave_type==='half_am'||b.leave_type==='half_pm'?'#10b981':'';
+            let color = b.leave_type==='AM'?'#10b981':
+                        b.leave_type==='PM'?'#10b981':'';
             return '<span class="sum-pill"'+(color?' style="border-color:'+color+';color:'+color+'"':'')+'>'+label+'</span>';
           }).join('') +
         '</div>';
