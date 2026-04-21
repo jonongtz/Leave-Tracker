@@ -1152,6 +1152,36 @@ function buildManage(){
 }
 
 function renderEditBox(el, filter){
+  // On first call, build the shell (header + search + list container) once.
+  // On subsequent calls (from search input), only refresh the list rows —
+  // never touch the input so it keeps focus and the keyboard stays open.
+  let listEl = el.querySelector('#mgmt-list-rows');
+  let countEl = el.querySelector('.mgmt-count');
+
+  if(!listEl){
+    // First render — build the full shell
+    el.innerHTML =
+      '<div class="mgmt-box-hdr">Edit Leave <span class="mgmt-count">0</span></div>' +
+      '<div class="mgmt-box-body" style="padding:0">' +
+        '<div style="padding:10px 12px 6px">' +
+          '<input class="mgmt-search" id="manageSearch" placeholder="Search name, date, type…">' +
+        '</div>' +
+        '<div class="mgmt-list" id="mgmt-list-rows"></div>' +
+      '</div>';
+
+    listEl  = el.querySelector('#mgmt-list-rows');
+    countEl = el.querySelector('.mgmt-count');
+
+    // Attach search listener ONCE — updates only the list, not the whole box
+    el.querySelector('#manageSearch').addEventListener('input', ev => {
+      refreshEditList(listEl, countEl, ev.target.value.toLowerCase());
+    });
+  }
+
+  refreshEditList(listEl, countEl, filter);
+}
+
+function refreshEditList(listEl, countEl, filter){
   const entries = allEntries.filter(e =>
     !filter ||
     e.name.toLowerCase().includes(filter) ||
@@ -1162,47 +1192,38 @@ function renderEditBox(el, filter){
 
   entries.sort((a,b) => a.start_date.localeCompare(b.start_date) || a.name.localeCompare(b.name));
 
-  el.innerHTML =
-    '<div class="mgmt-box-hdr">Edit Leave <span class="mgmt-count">'+entries.length+'</span></div>' +
-    '<div class="mgmt-box-body" style="padding:0">' +
-      '<div style="padding:10px 12px 6px">' +
-        '<input class="mgmt-search" id="manageSearch" placeholder="Search name, date, type…" value="'+filter.replace(/"/g,'&quot;')+'">' +
-      '</div>' +
-      '<div class="mgmt-list" id="mgmt-list-rows"></div>' +
-    '</div>';
+  if(countEl) countEl.textContent = entries.length;
 
-  const listEl = el.querySelector('#mgmt-list-rows');
+  listEl.innerHTML = '';
+
   if(entries.length === 0){
     listEl.innerHTML = '<div class="empty" style="padding:16px;text-align:center;">No entries found</div>';
-  } else {
-    entries.forEach(e => {
-      const row = document.createElement('div');
-      row.className = 'mgmt-entry';
-
-      const s = e.start_date.slice(5).replace('-','/');
-      const en = e.end_date.slice(5).replace('-','/');
-      const dateStr = s===en ? s : s+' – '+en;
-      const typeStr = leaveTypeLabel(e.leave_type);
-
-      row.innerHTML =
-        '<div class="avatar" style="background:'+getColor(e.name)+';width:26px;height:26px;font-size:9px">'+e.name.slice(0,2)+'</div>' +
-        '<div class="mgmt-entry-info">' +
-          '<span class="mgmt-entry-name">'+e.name+'</span>' +
-          '<span class="mgmt-entry-meta">'+dateStr+' · '+typeStr+(e.note?' · '+e.note:'')+'</span>' +
-        '</div>' +
-        '<div class="mgmt-entry-actions">' +
-          '<div class="btn-icon" style="width:28px;height:28px;font-size:13px" data-action="edit">&#9999;&#65039;</div>' +
-          '<div class="btn-icon del" style="width:28px;height:28px;font-size:13px" data-action="del">&#128465;&#65039;</div>' +
-        '</div>';
-
-      row.querySelector('[data-action="edit"]').addEventListener('click', ()=> openEditModal(e));
-      row.querySelector('[data-action="del"]').addEventListener('click',  ()=> confirmDelete(e.id, e.name, dateStr));
-      listEl.appendChild(row);
-    });
+    return;
   }
 
-  el.querySelector('#manageSearch').addEventListener('input', ev => {
-    renderEditBox(el, ev.target.value.toLowerCase());
+  entries.forEach(e => {
+    const row = document.createElement('div');
+    row.className = 'mgmt-entry';
+
+    const s = e.start_date.slice(5).replace('-','/');
+    const en = e.end_date.slice(5).replace('-','/');
+    const dateStr = s===en ? s : s+' – '+en;
+    const typeStr = leaveTypeLabel(e.leave_type);
+
+    row.innerHTML =
+      '<div class="avatar" style="background:'+getColor(e.name)+';width:26px;height:26px;font-size:9px">'+e.name.slice(0,2)+'</div>' +
+      '<div class="mgmt-entry-info">' +
+        '<span class="mgmt-entry-name">'+e.name+'</span>' +
+        '<span class="mgmt-entry-meta">'+dateStr+' · '+typeStr+(e.note?' · '+e.note:'')+'</span>' +
+      '</div>' +
+      '<div class="mgmt-entry-actions">' +
+        '<div class="btn-icon" style="width:28px;height:28px;font-size:13px" data-action="edit">&#9999;&#65039;</div>' +
+        '<div class="btn-icon del" style="width:28px;height:28px;font-size:13px" data-action="del">&#128465;&#65039;</div>' +
+      '</div>';
+
+    row.querySelector('[data-action="edit"]').addEventListener('click', ()=> openEditModal(e));
+    row.querySelector('[data-action="del"]').addEventListener('click',  ()=> confirmDelete(e.id, e.name, dateStr));
+    listEl.appendChild(row);
   });
 }
 
