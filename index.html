@@ -636,7 +636,7 @@
   <div class="tab-btn active" onclick="goTab(0)">Home</div>
   <div class="tab-btn" onclick="goTab(1)">Calendar</div>
   <div class="tab-btn" onclick="goTab(2)">Summary</div>
-  <div class="tab-btn" onclick="goTab(3)">Manage</div>
+  <div class="tab-btn" onclick="goTab(3)">🔒 Manage</div>
 </div>
 
 <div class="pages-wrap">
@@ -696,6 +696,9 @@ let allEntries = [];  // raw rows from leave_entries joined with employee name
 let leaveData  = {};  // { "Apr": [ {name, blocks:[{id,start,end,type,note}]} ] }
 let colorMap   = {};
 let auditLog   = [];  // last 20 audit entries
+
+const MANAGE_CODE = 'IDTE';   // ← change this to whatever code you want
+let manageUnlocked = false;
 
 function getColor(name){ return colorMap[name] || "#6b7280"; }
 function phKey(m,d){ return m+"-"+d; }
@@ -1373,9 +1376,49 @@ let currentTab = 0;
 const pagesEl  = document.getElementById('pages');
 const tabBtns  = document.querySelectorAll('.tab-btn');
 function goTab(i){
+  // Manage tab (index 3) requires the code
+  if(i === 3 && !manageUnlocked){
+    showCodePrompt();
+    return;
+  }
   currentTab = i;
   pagesEl.style.transform = 'translateX(-'+(i*25)+'%)';
   tabBtns.forEach((b,j)=>b.classList.toggle('active',j===i));
+}
+
+function showCodePrompt(){
+  openModal(
+    '<div class="modal-title">🔒 Manage Access</div>' +
+    '<div class="modal-body" style="margin-bottom:12px">Enter the access code to continue.</div>' +
+    '<input id="codeInput" class="edit-input" type="password" placeholder="Enter code…" ' +
+      'style="text-transform:uppercase;letter-spacing:4px;font-size:18px;text-align:center" />' +
+    '<div id="codeError" style="color:var(--danger);font-size:12px;font-weight:600;' +
+      'margin-top:6px;display:none;text-align:center">Incorrect code. Try again.</div>' +
+    '<div class="modal-actions" style="margin-top:12px">' +
+      '<button class="btn-modal btn-cancel" onclick="closeModal()">Cancel</button>' +
+      '<button class="btn-modal btn-confirm-save" id="codeSubmitBtn">Unlock</button>' +
+    '</div>'
+  );
+  const input = document.getElementById('codeInput');
+  setTimeout(()=>input?.focus(), 100);
+
+  // Allow Enter key to submit
+  input.addEventListener('keydown', e => {
+    if(e.key === 'Enter') document.getElementById('codeSubmitBtn').click();
+  });
+
+  document.getElementById('codeSubmitBtn').addEventListener('click', ()=>{
+    const val = document.getElementById('codeInput').value.trim().toUpperCase();
+    if(val === MANAGE_CODE){
+      manageUnlocked = true;
+      closeModal();
+      goTab(3);
+    } else {
+      document.getElementById('codeError').style.display = 'block';
+      document.getElementById('codeInput').value = '';
+      document.getElementById('codeInput').focus();
+    }
+  });
 }
 
 /* ═══════════════════════════════════════════
