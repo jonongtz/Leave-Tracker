@@ -581,6 +581,45 @@
     padding: 0 2px;
   }
 
+  /* ── AUDIT LOG ── */
+  .audit-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .audit-row:last-child { border-bottom: none; }
+  .audit-info { flex: 1; min-width: 0; }
+  .audit-top {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 2px;
+  }
+  .audit-name { font-size: 12px; font-weight: 700; }
+  .audit-badge {
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 20px;
+    padding: 1px 7px;
+    color: white;
+  }
+  .audit-add    { background: var(--success); }
+  .audit-edit   { background: var(--accent); }
+  .audit-delete { background: var(--danger); }
+  .audit-dates {
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    color: var(--text2);
+  }
+  .audit-time {
+    font-size: 10px;
+    color: var(--text2);
+    font-family: 'DM Mono', monospace;
+  }
+
   /* ── MANAGE DATE INPUTS ── */
   .mgmt-date-group { display: flex; flex-direction: column; flex: 1; gap: 3px; }
   .mgmt-date-label { font-size: 11px; color: var(--text2); font-weight: 500; }
@@ -656,6 +695,7 @@ let employees  = [];  // [{id, name}]
 let allEntries = [];  // raw rows from leave_entries joined with employee name
 let leaveData  = {};  // { "Apr": [ {name, blocks:[{id,start,end,type,note}]} ] }
 let colorMap   = {};
+let auditLog   = [];  // last 20 audit entries
 
 function getColor(name){ return colorMap[name] || "#6b7280"; }
 function phKey(m,d){ return m+"-"+d; }
@@ -713,6 +753,14 @@ async function loadData(){
   Object.keys(leaveData).forEach(m => {
     leaveData[m] = Object.values(leaveData[m]);
   });
+
+  // Fetch last 20 audit log entries
+  const { data: auditRaw } = await db
+    .from('audit_log')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20);
+  auditLog = auditRaw || [];
 
   setSync("ok","synced ("+allEntries.length+")");
   console.log("Loaded", allEntries.length, "entries");
@@ -855,6 +903,67 @@ function buildHome(){
   el.innerHTML =
       renderWeekCard("This Week", fmtWeek(thisWeek), thisMap)
     + renderWeekCard("Next Week", fmtWeek(nextWeek), nextMap);
+
+  // Append Recent Updates card (DOM-built to avoid quoting issues)
+  const recentCard = document.createElement('div');
+  recentCard.className = 'card';
+  recentCard.id = 'recent-updates-card';
+
+  const cardTitle = document.createElement('div');
+  cardTitle.className = 'card-title';
+  cardTitle.textContent = 'Recent Updates';
+  recentCard.appendChild(cardTitle);
+
+  if(auditLog.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'No recent activity';
+    recentCard.appendChild(empty);
+  } else {
+    auditLog.forEach(entry => {
+      const row = document.createElement('div');
+      row.className = 'audit-row';
+
+      const actionCls = 'audit-badge audit-' + entry.action;
+      const actionLabel = entry.action === 'add' ? 'Added' :
+                          entry.action === 'edit' ? 'Edited' : 'Deleted';
+
+      // Format date range
+      const s = entry.start_date ? Number(entry.start_date.slice(8)) : null;
+      const e = entry.end_date   ? Number(entry.end_date.slice(8))   : null;
+      const mo = entry.start_date ? MONTHS[Number(entry.start_date.slice(5,7))-1] : '';
+      const dateStr = s && e ? (s===e ? mo+' '+s : mo+' '+s+'–'+e) : '';
+
+      // Format timestamp in SG time
+      const dt = new Date(entry.created_at);
+      const timeStr = dt.toLocaleString('en-GB', {
+        timeZone: 'Asia/Singapore',
+        day:'2-digit', month:'short',
+        hour:'2-digit', minute:'2-digit', hour12:false
+      });
+
+      const avatar = document.createElement('div');
+      avatar.className = 'avatar';
+      avatar.style.cssText = 'background:'+getColor(entry.employee_name)+';width:26px;height:26px;font-size:9px;flex-shrink:0';
+      avatar.textContent = entry.employee_name.slice(0,2);
+
+      const info = document.createElement('div');
+      info.className = 'audit-info';
+      info.innerHTML =
+        '<div class="audit-top">' +
+          '<span class="audit-name">'+entry.employee_name+'</span>' +
+          '<span class="'+actionCls+'">'+actionLabel+'</span>' +
+          (dateStr ? '<span class="audit-dates">'+dateStr+'</span>' : '') +
+        '</div>' +
+        '<div class="audit-time">'+timeStr+'</div>';
+
+      row.appendChild(avatar);
+      row.appendChild(info);
+      recentCard.appendChild(row);
+    });
+  }
+
+  el.appendChild(recentCard);
 }
 
 /* ═══════════════════════════════════════════
