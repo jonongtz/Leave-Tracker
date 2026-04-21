@@ -146,6 +146,14 @@
     align-items: center;
     gap: 4px;
   }
+  .pill-dates {
+    font-weight: 600;
+  }
+  .pill-dow {
+    font-size: 10px;
+    color: var(--text2);
+    font-weight: 400;
+  }
   .pill-type {
     font-size: 9px;
     font-weight: 800;
@@ -598,6 +606,29 @@
     padding: 0 2px;
   }
 
+  /* ── PULL TO REFRESH ── */
+  #ptr-indicator {
+    position: absolute;
+    top: -50px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 36px;
+    background: var(--surface);
+    border-radius: 50%;
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: top 0.1s, opacity 0.1s;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+  #ptr-indicator.pulling { opacity: 1; }
+  #ptr-indicator.refreshing { opacity: 1; animation: spin 0.8s linear infinite; }
+
   /* ── CALENDAR YEAR SELECTOR ── */
   .cal-year-bar {
     display: flex;
@@ -690,7 +721,8 @@
   <div class="tab-btn" onclick="goTab(3)">🔒 Manage</div>
 </div>
 
-<div class="pages-wrap">
+<div class="pages-wrap" id="pagesWrap">
+  <div id="ptr-indicator">↻</div>
   <div class="pages" id="pages">
     <div class="page" id="pg-home"></div>
     <div class="page" id="pg-calendar"></div>
@@ -874,18 +906,27 @@ function fmtBlock(block){
   return str;
 }
 
-// Returns an object with date string, type tag, and note separately
+// Short day-of-week from a date string "YYYY-MM-DD"
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function dowStr(isoDate){ return DOW[new Date(isoDate).getDay()]; }
+
+// Returns an object with date string, dow string, type tag, and note separately
 function fmtBlockParts(block){
   const s = Number(block.start_date.slice(8));
   const e = Number(block.end_date.slice(8));
-  const mo = MONTHS[Number(block.start_date.slice(5,7))-1];
-  const dateStr = s === e
-    ? mo + ' ' + s
-    : mo + ' ' + s + '–' + e;
+
+  // date range: "15–24" (no month — context is already per-person row)
+  const dateStr = s === e ? String(s) : s + '–' + e;
+
+  // day-of-week: "Wed" for single day, "Wed–Fri" for range
+  const dowStart = dowStr(block.start_date);
+  const dowEnd   = dowStr(block.end_date);
+  const dowLabel = s === e ? dowStart : dowStart + '–' + dowEnd;
+
   const typeTag = (block.leave_type === 'AM' || block.leave_type === 'PM')
     ? block.leave_type : null;
   const note = block.note || null;
-  return { dateStr, typeTag, note };
+  return { dateStr, dowLabel, typeTag, note };
 }
 
 /* Returns true if date d (1-31) in month m falls within block's range */
@@ -1003,9 +1044,10 @@ function buildHome(){
                 map[name].map(b => {
                   const p = fmtBlockParts(b);
                   return '<div class="pill">' +
-                    p.dateStr +
-                    (p.typeTag ? ' <span class="pill-type pill-type-'+p.typeTag.toLowerCase()+'">'+p.typeTag+'</span>' : '') +
-                    (p.note ? ' <span class="pill-note">'+p.note+'</span>' : '') +
+                    '<span class="pill-dates">' + p.dateStr + '</span>' +
+                    '<span class="pill-dow">' + p.dowLabel + '</span>' +
+                    (p.typeTag ? '<span class="pill-type pill-type-'+p.typeTag.toLowerCase()+'">'+p.typeTag+'</span>' : '') +
+                    (p.note ? '<span class="pill-note">'+p.note+'</span>' : '') +
                   '</div>';
                 }).join('') +
               '</div>' +
@@ -1235,9 +1277,10 @@ function buildSummary(){
           p.blocks.map(b => {
             const bp = fmtBlockParts(b);
             return '<span class="sum-pill">' +
-              bp.dateStr +
-              (bp.typeTag ? ' <span class="pill-type pill-type-'+bp.typeTag.toLowerCase()+'">'+bp.typeTag+'</span>' : '') +
-              (bp.note ? ' <span class="pill-note">'+bp.note+'</span>' : '') +
+              '<span class="pill-dates">' + bp.dateStr + '</span>' +
+              '<span class="pill-dow">' + bp.dowLabel + '</span>' +
+              (bp.typeTag ? '<span class="pill-type pill-type-'+bp.typeTag.toLowerCase()+'">'+bp.typeTag+'</span>' : '') +
+              (bp.note ? '<span class="pill-note">'+bp.note+'</span>' : '') +
             '</span>';
           }).join('') +
         '</div>';
@@ -1568,6 +1611,64 @@ function showToast(msg){
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>el.classList.remove('show'), 2500);
 }
+
+/* ═══════════════════════════════════════════
+   PULL TO REFRESH
+═══════════════════════════════════════════ */
+(function(){
+  const THRESHOLD = 70; // px drag needed to trigger refresh
+  let startY = 0, currentY = 0, isDragging = false, isRefreshing = false;
+  const indicator = document.getElementById('ptr-indicator');
+
+  function getActivePage(){
+    const pages = document.querySelectorAll('.page');
+    return pages[currentTab] || pages[0];
+  }
+
+  document.addEventListener('touchstart', e => {
+    if(isRefreshing) return;
+    const page = getActivePage();
+    if(page.scrollTop === 0){
+      startY = e.touches[0].clientY;
+      isDragging = true;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if(!isDragging || isRefreshing) return;
+    currentY = e.touches[0].clientY;
+    const dist = Math.min(currentY - startY, THRESHOLD + 20);
+    if(dist > 0){
+      const pct = Math.min(dist / THRESHOLD, 1);
+      indicator.style.top = (dist * 0.5 - 25) + 'px';
+      indicator.style.opacity = pct;
+      indicator.classList.add('pulling');
+      indicator.classList.remove('refreshing');
+      indicator.style.transform = 'translateX(-50%) rotate(' + (pct * 180) + 'deg)';
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', async () => {
+    if(!isDragging || isRefreshing) return;
+    isDragging = false;
+    const dist = currentY - startY;
+    if(dist >= THRESHOLD){
+      isRefreshing = true;
+      indicator.style.top = '12px';
+      indicator.style.opacity = '1';
+      indicator.style.transform = 'translateX(-50%)';
+      indicator.classList.add('refreshing');
+      await refresh();
+      isRefreshing = false;
+      showToast('Refreshed');
+    }
+    // Reset
+    indicator.style.top = '-50px';
+    indicator.style.opacity = '0';
+    indicator.classList.remove('pulling', 'refreshing');
+    startY = 0; currentY = 0;
+  });
+})();
 
 /* ═══════════════════════════════════════════
    INIT
