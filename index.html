@@ -146,6 +146,23 @@
     align-items: center;
     gap: 4px;
   }
+  .pill-type {
+    font-size: 9px;
+    font-weight: 800;
+    border-radius: 4px;
+    padding: 1px 4px;
+    color: white;
+  }
+  .pill-type-am { background: #10b981; }
+  .pill-type-pm { background: #f59e0b; }
+  .pill-note {
+    font-size: 10px;
+    color: var(--text2);
+    font-style: italic;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .sum-pill .pill-type { font-size: 9px; font-weight: 800; border-radius: 4px; padding: 1px 4px; color: white; }
+  .sum-pill .pill-note { font-size: 10px; color: var(--text2); font-style: italic; }
   .pill-del {
     background: none; border: none; cursor: pointer;
     color: var(--text2); font-size: 13px; line-height: 1;
@@ -853,8 +870,22 @@ function fmtBlock(block){
   let str = s === e ? String(s) : s+"–"+e;
   if(block.leave_type === 'AM') str += ' (AM)';
   else if(block.leave_type === 'PM') str += ' (PM)';
-  if(block.note) str += ' *';
+  // note shown separately via fmtBlockFull
   return str;
+}
+
+// Returns an object with date string, type tag, and note separately
+function fmtBlockParts(block){
+  const s = Number(block.start_date.slice(8));
+  const e = Number(block.end_date.slice(8));
+  const mo = MONTHS[Number(block.start_date.slice(5,7))-1];
+  const dateStr = s === e
+    ? mo + ' ' + s
+    : mo + ' ' + s + '–' + e;
+  const typeTag = (block.leave_type === 'AM' || block.leave_type === 'PM')
+    ? block.leave_type : null;
+  const note = block.note || null;
+  return { dateStr, typeTag, note };
 }
 
 /* Returns true if date d (1-31) in month m falls within block's range */
@@ -969,7 +1000,14 @@ function buildHome(){
             '<div class="person-info">' +
               '<div class="person-name">'+name+'</div>' +
               '<div class="pills">' +
-                map[name].map(b=>'<div class="pill">'+fmtBlock(b)+(b.note?' <span title="'+b.note+'">📝</span>':'')+'</div>').join('') +
+                map[name].map(b => {
+                  const p = fmtBlockParts(b);
+                  return '<div class="pill">' +
+                    p.dateStr +
+                    (p.typeTag ? ' <span class="pill-type pill-type-'+p.typeTag.toLowerCase()+'">'+p.typeTag+'</span>' : '') +
+                    (p.note ? ' <span class="pill-note">'+p.note+'</span>' : '') +
+                  '</div>';
+                }).join('') +
               '</div>' +
             '</div>' +
           '</div>'
@@ -1195,10 +1233,12 @@ function buildSummary(){
         '<div class="sum-name">'+p.name+'</div>' +
         '<div class="sum-segs">' +
           p.blocks.map(b => {
-            let label = fmtBlock(b);
-            let color = b.leave_type==='AM'?'#10b981':
-                        b.leave_type==='PM'?'#10b981':'';
-            return '<span class="sum-pill"'+(color?' style="border-color:'+color+';color:'+color+'"':'')+'>'+label+'</span>';
+            const bp = fmtBlockParts(b);
+            return '<span class="sum-pill">' +
+              bp.dateStr +
+              (bp.typeTag ? ' <span class="pill-type pill-type-'+bp.typeTag.toLowerCase()+'">'+bp.typeTag+'</span>' : '') +
+              (bp.note ? ' <span class="pill-note">'+bp.note+'</span>' : '') +
+            '</span>';
           }).join('') +
         '</div>';
       list.appendChild(row);
