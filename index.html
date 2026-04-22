@@ -1261,6 +1261,19 @@ function buildSummary(){
     return;
   }
 
+  // Copy button
+  const copyBar = document.createElement('div');
+  copyBar.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:8px;';
+  const copyBtn = document.createElement('button');
+  copyBtn.id = 'sumCopyBtn';
+  copyBtn.textContent = '📋 Copy Summary';
+  copyBtn.style.cssText = 'background:var(--text);color:white;border:none;border-radius:8px;' +
+    'padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;' +
+    'transition:opacity 0.2s;';
+  copyBtn.addEventListener('click', copySummary);
+  copyBar.appendChild(copyBtn);
+  el.appendChild(copyBar);
+
   keys.forEach(key => {
     const keyParts = key.split('-');
     const m = keyParts[0]; const yr = keyParts[1];
@@ -1288,6 +1301,7 @@ function buildSummary(){
             const bp = fmtBlockParts(b);
             return '<span class="sum-pill">' +
               '<span class="pill-dates">' + bp.dateStr + '</span>' +
+              ' ' +
               '<span class="pill-dow">' + bp.dowLabel + '</span>' +
               (bp.typeTag ? '<span class="pill-type pill-type-'+bp.typeTag.toLowerCase()+'">'+bp.typeTag+'</span>' : '') +
               (bp.note ? '<span class="pill-note">'+bp.note+'</span>' : '') +
@@ -1299,6 +1313,51 @@ function buildSummary(){
 
     block.appendChild(list);
     el.appendChild(block);
+  });
+}
+
+function copySummary(){
+  const keys = Object.keys(leaveData).filter(k => leaveData[k].length > 0);
+  keys.sort((a, b) => {
+    const pa = a.split('-'), pb = b.split('-');
+    return new Date(Number(pa[1]), MONTHS.indexOf(pa[0]), 1) -
+           new Date(Number(pb[1]), MONTHS.indexOf(pb[0]), 1);
+  });
+
+  if(keys.length === 0){ showToast('Nothing to copy'); return; }
+
+  const lines = [];
+  keys.forEach(key => {
+    const [m, yr] = key.split('-');
+    lines.push('── ' + m + ' ' + yr + ' ──');
+    const people = [...(leaveData[key]||[])].sort((a,b)=>a.name.localeCompare(b.name));
+    people.forEach(p => {
+      const segs = p.blocks.map(b => {
+        const bp = fmtBlockParts(b);
+        let s = bp.dateStr + ' ' + bp.dowLabel;
+        if(bp.typeTag) s += ' (' + bp.typeTag + ')';
+        if(bp.note) s += ' - ' + bp.note;
+        return s;
+      }).join(', ');
+      lines.push(p.name + ': ' + segs);
+    });
+    lines.push('');
+  });
+
+  const text = lines.join('\n').trimEnd();
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('sumCopyBtn');
+    if(btn){ btn.textContent = '✅ Copied!'; setTimeout(()=>{ btn.textContent='📋 Copy Summary'; }, 2000); }
+    showToast('Summary copied!');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0;';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Summary copied!');
   });
 }
 
