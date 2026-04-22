@@ -863,23 +863,23 @@ async function loadData(){
     note:       r.note || '',
   }));
 
-  // Build leaveData: group by month, then by person
-  // Only include CAL_YEARS entries
+  // Build leaveData: group by "Mon-YYYY" key, then by person
+  // Includes all CAL_YEARS entries
   leaveData = {};
   allEntries.forEach(row => {
     const yr = Number(row.start_date.slice(0,4));
     if(!CAL_YEARS.includes(yr)) return;
 
     const monthIdx = Number(row.start_date.slice(5,7)) - 1;
-    const m = MONTHS[monthIdx];
+    const key = MONTHS[monthIdx] + '-' + yr;  // e.g. "Apr-2026"
 
-    if(!leaveData[m]) leaveData[m] = {};
-    if(!leaveData[m][row.name])
-      leaveData[m][row.name] = { name: row.name, blocks: [] };
-    leaveData[m][row.name].blocks.push(row);
+    if(!leaveData[key]) leaveData[key] = {};
+    if(!leaveData[key][row.name])
+      leaveData[key][row.name] = { name: row.name, blocks: [] };
+    leaveData[key][row.name].blocks.push(row);
   });
-  Object.keys(leaveData).forEach(m => {
-    leaveData[m] = Object.values(leaveData[m]);
+  Object.keys(leaveData).forEach(key => {
+    leaveData[key] = Object.values(leaveData[key]);
   });
 
   // Fetch last 20 audit log entries (newest first) + total count for numbering
@@ -1247,26 +1247,36 @@ function buildSummary(){
   const el = document.getElementById('pg-summary');
   el.innerHTML = '';
 
-  const months = MONTHS.filter(m => leaveData[m] && leaveData[m].length > 0);
-  if(months.length === 0){
+  // Sort keys chronologically: "Apr-2026", "May-2026", ... "Jan-2027", etc.
+  const keys = Object.keys(leaveData).filter(k => leaveData[k].length > 0);
+  keys.sort((a, b) => {
+    const parts_a = a.split('-'); const parts_b = b.split('-');
+    const da = new Date(Number(parts_a[1]), MONTHS.indexOf(parts_a[0]), 1);
+    const db = new Date(Number(parts_b[1]), MONTHS.indexOf(parts_b[0]), 1);
+    return da - db;
+  });
+
+  if(keys.length === 0){
     el.innerHTML = '<div class="loading"><div>No data yet</div></div>';
     return;
   }
 
-  months.forEach(m => {
+  keys.forEach(key => {
+    const keyParts = key.split('-');
+    const m = keyParts[0]; const yr = keyParts[1];
     const block = document.createElement('div');
     block.className = 'sum-month-card';
 
     const hdr = document.createElement('div');
     hdr.className = 'sum-month-hdr';
-    hdr.textContent = m + ' 2026';
+    hdr.textContent = m + ' ' + yr;
     block.appendChild(hdr);
 
     const list = document.createElement('div');
     list.className = 'sum-list';
 
     // Sort people alphabetically within month
-    const people = [...(leaveData[m]||[])].sort((a,b)=>a.name.localeCompare(b.name));
+    const people = [...(leaveData[key]||[])].sort((a,b)=>a.name.localeCompare(b.name));
     people.forEach(p => {
       const row = document.createElement('div');
       row.className = 'sum-row';
@@ -1378,7 +1388,7 @@ function refreshEditList(listEl, countEl, filter){
     (e.note||'').toLowerCase().includes(filter)
   );
 
-  entries.sort((a,b) => a.start_date.localeCompare(b.start_date) || a.name.localeCompare(b.name));
+  entries.sort((a,b) => a.name.localeCompare(b.name) || a.start_date.localeCompare(b.start_date));
 
   if(countEl) countEl.textContent = entries.length;
 
